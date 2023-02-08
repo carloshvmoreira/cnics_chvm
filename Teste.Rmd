@@ -4,6 +4,15 @@ output: html_document
 date: "2023-02-08"
 ---
 ```{r}
-Fom rstudio
+#install.packages(gitcreds)
+#edit_git_conhello <- a
+#create_github_token()
+#gitcreds::gitcreds_set()
+lkf <- function(d,p) names(d)[grep(p,names(d))]
+
 ``` 
+
+```{r}
+
+```
 
