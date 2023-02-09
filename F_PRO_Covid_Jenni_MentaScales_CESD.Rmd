@@ -1,0 +1,227 @@
+---
+title: "F_PRO_Covid_Jenni_MentaScales_CESD"
+output: html_document
+date: "2023-02-08"
+---
+```{r}
+#install.packages(gitcreds)
+#edit_git_conhello <- a
+#create_github_token()
+#gitcreds::gitcreds_set()
+lkf <- function(d,p) names(d)[grep(p,names(d))]
+
+``` 
+
+```{r}
+
+```
+
+---
+title: "F_PRO_Covid_Jenni_MentaScales"
+author: "Carlos Moreira"
+date: "For version control --> *The date and time are* *`r Sys.time()`*"
+output: html_document
+---
+
+
+## General Anxiety Disorder-7 Scale 
+Minimal Anxiety (score of 0-4)
+Mild Anxiety (score of 5-9)
+Moderate Anxiety (score of 10-14)
+Severe Anxiety (score >15)
+
+
+
+## CES-D
+*c/o >=16
+https://www.apa.org/pi/about/publications/caregivers/practice-settings/assessment/tools/depression-scale
+## PC-PTSD
+*>= 33
+https://www.ptsd.va.gov/professional/assessment/adult-sr/ptsd-checklist.asp
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r  global_options, echo=F}
+## Setting global options for chunks
+knitr::opts_chunk$set(echo = F, message = FALSE,
+  warning = FALSE, include = T)
+```
+
+```{r loading packages, echo=F, include=F}
+
+pacman::p_load(
+  tidyverse,papeR,
+  qwraps2,# deduplication, grouping, and slicing functions
+  janitor,     # function for reviewing duplicates
+  stringr,
+  arsenal,data.table,
+  tsibble,
+  datefixR,
+  readr, gt,
+  sjmisc,
+  labelled,
+  crosstable,
+  here,         # File locator
+  skimr,        # get overview of data
+  tidyverse,    # data management + ggplot2 graphics
+  gtsummary,    # summary statistics and tests
+  rstatix,      # summary statistics and statistical tests
+  janitor,      # adding totals and percents to tables
+  scales,       # easily convert proportions to percents
+  flextable,
+  haven, tidyr,
+  purrr, artemis, rtemis,
+  parsedate, data.table
+  ,markdown
+,conflicted
+,dplyr
+,readr
+,table1
+,readxl
+,tidyr
+,base
+,tableone
+,magrittr
+,boot
+,knitr
+,stringr
+,compare
+,admiral
+,lubridate
+,tibble
+,gtsummary)
+
+conflict_prefer("filter","dplyr")
+conflict_prefer("starts_with", "expss")
+conflict_prefer("select", "dplyr")#over statslibrary(tidyverse)
+
+# install.packages("remotes")
+# remotes::install_github("egenn/rtemis")
+# library(rtemis)
+
+#install.packages("remotes")
+#remotes::install_github("egenn/rtemis")
+```
+
+```{r Cleaning Enviroment}
+rm(list= ls()[!(ls() %in% c(''))])
+
+```
+
+
+#Root functions
+```{r Functions, echo=F, include=F}
+#Function for sorting the variables by alphabetical order
+AlphaColumns <- function(x) {
+                      x %>% tibble %>%
+                            select("StudyId", sort(colnames(.)))
+}
+
+#Looking for something
+lkf <- function(d,p) names(d)[grep(p,names(d))]
+```
+
+#Loding data
+```{r Loading data}
+
+load("~/Library/CloudStorage/Box-Box/UCSF_86/Jain_1986/Output_data/cohortF_Drugs_Drugs_SevMod.RData")
+```
+
+```{r LoadingMental dataset}
+PRO_PHQ_DepressionAnxiety <- read.csv("~/Library/CloudStorage/Box-Box/1986 Study/CNICS189_Sept2022/PRO_PHQ_DepressionAnxiety.csv", stringsAsFactors=TRUE)
+```
+
+```{r FilteringByDate}
+PRO_PHQ_DepressionAnxiety$PRO_Date <- as.Date(PRO_PHQ_DepressionAnxiety$date, tryFormats = "%Y-%m-%d")
+range(PRO_PHQ_DepressionAnxiety$PRO_Date)
+#"2005-09-22" "2022-05-06"
+
+# Up to 24m before LD
+PRO_PHQ_DepressionAnxiety <- PRO_PHQ_DepressionAnxiety %>%
+  filter(PRO_Date >= as.Date("2018-03-19"))
+range(PRO_PHQ_DepressionAnxiety$PRO_Date)
+#"2018-03-19" "2022-05-06"
+length(unique(PRO_PHQ_DepressionAnxiety$StudyId))
+#10515
+```
+
+
+```{r Estabilishing VisitOrder}
+PRO_PHQ_DepressionAnxiety <- PRO_PHQ_DepressionAnxiety %>% 
+    group_by(StudyId) %>% 
+    dplyr::arrange(StudyId, as.Date(PRO_Date)) %>% 
+    mutate(Visit_SurveyOrder = row_number())
+
+range(PRO_PHQ_DepressionAnxiety$Visit_SurveyOrder)
+#1 11
+```
+
+```{r Checking Variables Mental }
+summary(PRO_PHQ_DepressionAnxiety)
+```
+
+
+
+
+
+
+
+```{r Editing Tables, echo=F, include=F}
+reset_gtsummary_theme()
+theme_gtsummary_journal(journal = "lancet")
+#> Setting theme `JAMA`
+theme_gtsummary_compact()
+#> Setting theme `Compact`
+
+```
+
+```{r Baseline Risk, echo=F, include=T}
+TabMari <- SSI_SevMod_Base %>%
+ select( c("StudyId", "Site", "Age", "Race", "BirthSex", "AnySevMod", "AnySevere","ast_1508_od", "ast_pot2_Bn", "ast_coc2_Bn",
+  "ast_pst2_Bn",              "ast_meth2_Bn",             "ast_inh2_Bn",             "ast_sed2_Bn",            
+  "ast_hal2_Bn",              "ast_opi2_Bn",              "ast_opip2_Bn",             "ast_her2_Bn",            
+  "ast_fen2_Bn",              "ast_narc2_Bn", "AssistRiskScore_CAN", "AssistRiskScore_COCA",   "AssistRiskScore_PxStim" , "AssistRiskScore_HAL", "AssistRiskScore_Her",   
+"AssistRiskScore_INH", "AssistRiskScore_METH",   "AssistRiskScore_NARC",   "AssistRiskScore_OpiPx",  "AssistRiskScore_OpiSt", 
+ "AssistRiskScore_SED", "AssistRiskScore_FEN","AssistScore_COCA",       "AssistScore_FEN",        "AssistScore_HAL",       
+ "AssistScore_HER",        "AssistScore_INH",        "AssistScore_METH",       "AssistScore_NARC",       "AssistScore_OpiPx",     
+ "AssistScore_OpiSt",      "AssistScore_POT",        "AssistScore_PxSTIM",     "AssistScore_SED" ,"PolyTwo_Bn","PolyThree_Bn"  )
+ )
+names(SSI_SevMod_Base)
+ TabSevMod <- TabMari %>%
+  tbl_summary(by=AnySevMod, missing="no",
+              
+              
+    statistic = list(all_continuous() ~ "{p50} [{p25}-{p75}]; {mean} ({sd})",
+                     all_categorical() ~ "{n} / {N} ({p}%)"),
+     digits = all_continuous() ~ 0
+              
+              
+              ) %>%
+             add_p(pvalue_fun = ~style_pvalue(.x, digits = 2),simulate.p.value=TRUE ) %>%
+  add_overall() %>%
+  add_n() %>% 
+  # remove studyId row
+  modify_table_body(filter, !(variable == "StudyId"))  %>%
+  remove_row_type(BirthSex, type = "level", c("Male", "Intersexed")) %>%
+   remove_row_type(Race, type = "level", c("")) %>%
+  modify_header(label ~ "**Variable**") %>%
+  modify_spanning_header(c("stat_1", "stat_2") ~ "**Any Severe | Moderate SSI Score**") %>%
+  modify_footnote(
+    all_stat_cols() ~ "Median (IQR) or Frequency (%); Mean (SD); (min-max)"
+  ) %>%
+  modify_caption("**Table X  Characteristics of a Cohort of People Living with HIV Enrolled in the CFAR Network of Integrated Clinical Systems (CNICS) between 2018 and 2022 (N=XXXX)	by SSI score (Severe) for ANY respective substance at Baseline Visit**") %>%
+  bold_labels() %>% 
+gtsummary::as_gt() %>%             # convert to gt table
+gt::tab_source_note(gt::md("*Jennis's study / CNICS 06feb2023*")) 
+
+ 
+  TabSevMod %>% gt::gtsave(             # save table as image
+    filename = "~/Library/CloudStorage/Box-Box/UCSF_86/LocalRepo/cnics_chvm/FiguresBox/SevereMod_SSI.html", inline_css = TRUE)
+
+TabSevMod
+
+```
