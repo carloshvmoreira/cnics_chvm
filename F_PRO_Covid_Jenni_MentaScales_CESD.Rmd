@@ -147,7 +147,7 @@ names(PRO_PHQ_DepressionAnxiety)
 ```
 
 ```{r CESD}
-# Mental Health 
+# Mental Health  
 # Center for Epidemiologic Studies on Depression (CESD)
 # Mean Depression Score (SD)
 # Symptoms consistent with clinical depression (CESD Score ≥16) (yes/no)
