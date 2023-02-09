@@ -1,0 +1,3169 @@
+---
+title: "E_PRO_Covid_Jenni"
+author: "Carlos Moreira"
+date: "For version control --> *The date and time are* *`r Sys.time()`*"
+output: html_document
+knit: (function(PRO_Covid_Rscript_Explorer_chvm.Rmd, encoding) {
+  rmarkdown::render(D_PRO_Covid_Jenni_PREPandCLEAN_Drugs2.Rmd, encoding = encoding, output_dir = "~/Library/CloudStorage/Box-Box/UCSF_86/Jain_1986/Reports")})
+---
+
+# Section 1 --\> The purpose:
+
+"..Non-fatal drug overdose: Row 1508 can be coded into a binary
+variable, self-reported non-fatal drug overdose in the past six
+months (yes/no) if the value is not missing and is greater than
+or equal to 1 they can be placed in the yes category.
+
+Injection drug use ever: Row 150 can be coded into a binary
+variable of injection drug use ever. It would be nice to use a
+more recent measure of IDU, but there doesn't seem to be one, is
+there?
+
+The ASSIST: It seems like a lot of the drug use data is from the
+ASSIST, which is a little complicated, but we can do a lot with
+it when we have it coded. To fully use the ASSIST data, we can
+create substance use involvement scores and risk levels as seen
+in the attached article (see highlighted sections).
+
+Other drug use: In terms of drug use in general, we can look at
+the frequency of different types of drug use (using the most
+recent reporting period) and create dichotomous variables of meth
+use in the past x months (yes/no), non-prescription opioid use in
+the past three months, heroin use in the past three months etc,
+and we can present and organize the most relevant (i.e.,
+prevalent) drug use variables under a subheading entitled
+"substance use in the past x months". When doing this I always
+differentiate between drug use and alcohol use and illicit drug
+use and licit drug use, which is why I like to look at individual
+drugs. Getting a sense of the frequency of the main drugs will
+help us understand what to focus on and what to exclude.
+
+Poly-substance use: Then, we can create a measure of
+poly-substance use which would be using 2 or more of the
+substance use variables we decide to include (excluding alcohol
+use).
+
+## Additional instructions from e-mails:
+14dec2022
+#######################################################################################################################################
+#######################################################################################################################################
+##Outcome varible##
+#######################################################################################################################################
+#######################################################################################################################################
+"...As we discussed earlier, we should begin by coding the following three dichotomous variables which can be explored as methential outcome variables;
+
+1) Any substance use disorder including those with severe SSI scores
+2) Any substance use disorder including those with severe or moderate SSI scores
+3) Any substance use disorder including those with severe or moderate SSI scores or hazardous alcohol consumption including women with a score of 3 or more and men with a score of 4 or more.
+
+-->We will likely use the variable with the highest prevalence.
+
+
+
+```{r  Global_options, echo=F}
+## Setting global options for chunks
+knitr::opts_chunk$set(echo = F, message = FALSE,
+  warning = FALSE, include = F)
+```
+
+```{r Loading packages, echo=F, include=F}
+
+pacman::p_load(
+  tidyverse,papeR,
+  qwraps2,# deduplication, grouping, and slicing functions
+  janitor,     # function for reviewing duplicates
+  stringr,
+  arsenal,data.table,
+  tsibble,
+  datefixR,
+  readr, gt,
+  sjmisc,
+  labelled,
+  crosstable,
+  here,         # File locator
+  skimr,        # get overview of data
+  tidyverse,    # data management + ggplot2 graphics
+  gtsummary,    # summary statistics and tests
+  rstatix,      # summary statistics and statistical tests
+  janitor,      # adding totals and percents to tables
+  scales,       # easily convert proportions to percents
+  flextable,
+  haven, tidyr,
+  purrr, artemis, rtemis,
+  parsedate, data.table
+  ,markdown
+,conflicted
+,dplyr
+,readr
+,table1
+,readxl
+,tidyr
+,base
+,tableone
+,magrittr
+,boot
+,knitr
+,stringr
+,compare
+,admiral
+,lubridate
+,tibble
+,gtsummary)
+
+conflict_prefer("filter","dplyr")
+conflict_prefer("starts_with", "expss")
+conflict_prefer("select", "dplyr")#over statslibrary(tidyverse)
+
+# install.packages("remotes")
+# remotes::install_github("egenn/rtemis")
+# library(rtemis)
+
+#install.packages("remotes")
+#remotes::install_github("egenn/rtemis")
+```
+
+#Root functions
+```{r Core Functions, echo=F, include=F}
+#Function for sorting the variables by alphabetical order
+AlphaColumns <- function(x) {
+                      x %>% tibble %>%
+                            select("StudyId", "Site","BirthSex","BirthYear","Race", "Hispanic","Date_PRO", sort(colnames(.)))
+                            }
+```
+
+#Here
+
+#Section 1 --> housekeeping
+```{r Uploading Data from AZero1Merging, echo=F, include=F}
+# Loading merged and updated file --. September's cut
+#L329_AZero1Jeeni_MERGING
+rm(list= ls()[!(ls() %in% c('AlphaColumns'))])
+
+load("~/Library/CloudStorage/Box-Box/UCSF_86/Jain_1986/Output_data/cohortF_Drugs_OOH_Drugs_UpDated.RData")
+rm(list= ls()[!(ls() %in% c('cohortF_Drugs','AlphaColumns'))])
+
+cohortF_Drugs <- AlphaColumns(cohortF_Drugs)
+```
+
+#jenny's email
+Three versions: 2005-2014 (ASSIST), 2014-2019 ("Modified ASSIST"), and 2019-current (ASSIST 2019). Categorization of substances, and terminology changed substantially between each version. The categories of sedatives, hallucinogens, inhalants, and prescription stimulants added in 2014.  Fentanyl and narcotic pain meds each became their own categories in 2019. Opioids undwerwent dramatic recategorization (see 'related non-core measures", below). Initial version asked broadly about 'opiates', 2014 version broadly about 'street opiates', and 2019 version dropped the word 'street', broke categories into heroin, fentanyl, and narcotic pain meds for non-medical use. In 2019 version, added drug use modality for cocaine, meth, opioids, marijuana. 
+
+```{r Merging_Demographics, echo=F, include=F}
+#FIXING DEMOGRAPHICS
+# 
+# #cohortF_Drugs <- cohortF_Drugs %>% replace_na(list(x = 0, y = "unknown",))
+# #cohortF_Drugs$ast_od %>% replace_na("Missing")
+# 
+# #Age
+# cohortF_Drugs$BirthYear <- NULL
+# demographicsSeptember <- read.csv("~/Library/CloudStorage/Box-Box/1986 Study/CNICS189_Sept2022/Patient.csv",stringsAsFactors = T )
+# demographics <-demographicsSeptember
+# setDT(demographics)
+# 
+# demographics <- demographics %>%
+#   select(StudyId, BirthYear, BirthSex, Transgender, Race, Hispanic)
+# length(unique(demographics$StudyId))
+# 
+# cohortF_Drugs_MERGED <- inner_join(cohortF_Drugs,demographics, by=c("StudyId"))
+# 
+# 
+# cohortF_Drugs <- cohortF_Drugs_MERGED
+# length(unique(cohortF_Drugs$StudyId))
+# #6363
+```
+
+```{r RowNumber by Date, echo=F, include=F}
+#Variable depicting Survey order by Date
+cohortF_Drugs <- cohortF_Drugs %>% 
+    group_by(StudyId) %>% 
+    dplyr::arrange(StudyId, as.Date(Date_PRO)) %>% 
+    mutate(Visit_SurveyDRUGS_Order = row_number())
+```
+
+```{r Visit_Year, echo=F, include=F}
+##Year of visit
+range(cohortF_Drugs$Date_PRO)
+cohortF_Drugs$Date_PRO_year <- format(as.Date(cohortF_Drugs$Date_PRO, format= "%Y-%m-%d"),"%Y")
+cohortF_Drugs$Date_PRO_year <- as.numeric(cohortF_Drugs$Date_PRO_year)
+```
+
+
+```{r AgeGrouping, echo=F, include=F}
+#Creating AGE or Baseline / inclusion 
+# 
+# names(cohortF_Drugs)
+# setDT(cohortF_Drugs)[Visit_SurveyDRUGS_Order == 1, Age := Date_PRO_year - BirthYear]
+# 
+# table(cohortF_Drugs$Age, useNA="ifany")
+# 
+# cohortF_Drugs <- cohortF_Drugs %>% 
+#   mutate(
+#     AgeCat = case_when(
+#       Age >=18 & Age <= 29 ~ "18-29 years",
+#       Age >=30  & Age <= 39 ~ "30-39 years",
+#       Age >= 40 & Age <=49  ~ "40-49 years",
+#       Age>=50 & Age <=59~ "50-59 years",
+#       Age>=60 ~ "60+ years",
+#     ),
+# 
+#     # Convert to factor
+#     AgeCat = factor( AgeCat,
+#       level = c("18-29 years","30-39 years","40-49 years","50-59 years","60+ years")
+#     )
+#   )
+```
+
+
+```{r OrderingColumns, echo=F, include=F}
+#Sorting column names
+cohortF_Drugs <- setDT(cohortF_Drugs)
+
+cohortF_Drugs <- AlphaColumns(cohortF_Drugs)
+
+cohortF_Drugs$Date <- NULL 
+
+cohortF_Drugs <- cohortF_Drugs %>% select(-contains(c('date1')))
+
+```
+
+
+```{r ConvertingInCharacter, echo=F, include=F}
+#Converting chr to factor
+cohortF_Drugs[sapply(cohortF_Drugs, is.character)] <- lapply(cohortF_Drugs[sapply(cohortF_Drugs, is.character)],as.factor)
+```
+#?
+#Lockdown
+```{r SlicingLockdown _NADRA?, echo=F, include=F}
+#Defining Before / After periods
+cohortF_Drugs <- rename(cohortF_Drugs, SurveyDate = Date_PRO)
+range(cohortF_Drugs$SurveyDate)
+cohortF_Drugs$Count_bef <- ifelse(cohortF_Drugs$SurveyDate <= 
+                                as.Date("2020-03-19"), 1,0)
+
+cohortF_Drugs<- cohortF_Drugs %>% 
+  group_by(StudyId) %>% 
+  mutate(sum_by_group_bef = sum(Count_bef))
+
+AlphaColumns <- function(x) {
+                      x %>% tibble %>%
+                            select("StudyId", "sum_by_group_bef","Count_bef","SurveyDate","Site","BirthSex","BirthYear","Race", "Hispanic", sort(colnames(.)))
+                            }
+cohortF_Drugs<-AlphaColumns(cohortF_Drugs)
+
+cohortF_Drugs$Lockdown <- ifelse(cohortF_Drugs$SurveyDate <= as.Date("2020-03-19"), "Before", "After")
+
+#Subsetting those with at least ONE visit before the LD (-24m)
+cohortF_Drugs_bef<-subset(cohortF_Drugs, cohortF_Drugs$sum_by_group_bef>=1)
+
+length(unique(cohortF_Drugs_bef$StudyId))
+#7126
+
+#?Nadra
+Before0 <- subset(cohortF_Drugs_bef, Lockdown == "Before")
+length(unique(Before0$StudyId))
+#4912
+length(unique(cohortF_Drugs$StudyId))
+#6363
+After0 <- subset(cohortF_Drugs_bef, Lockdown == "After")
+length(unique(After0$StudyId))
+#4614
+
+###HERE I CHANGED THE COHORT AFTER REVIEWING THE INITIAL CRITERIA
+cohortF_Drugs <- cohortF_Drugs_bef
+#Nadra
+```
+
+#ASSIST split date
+```{r, echo=F, include=F}
+#cohortF_Drugs$AssistSplit <- ifelse(cohortF_Drugs$SurveyDate < as.Date("2020-03-19"), "Before", "After")
+```
+
+
+```{r CountingSurveys, echo=F, include=F}
+#Number of surveys per day
+#OVerall number of surveys per date
+countSurveys <- function(count) {
+    Dates <- as.Date(strftime(cohortF_Drugs$SurveyDate, "%Y-%m-%d"))
+    allDates <- seq(from = min(Dates), to = max(Dates), by = "day")
+    survey.count <- sapply(allDates, FUN = function(X) sum(Dates == X))
+    data.frame(day = allDates, survey.count = survey.count)
+}
+
+length(unique(cohortF_Drugs$StudyId))
+(NSurveys <- countSurveys(cohortF_Drugs$SurveyDate))
+
+```
+
+
+#Table 1 --> Demographics
+```{r, echo=F, include=F}
+#Done above
+```
+
+
+#MISSINGNESS --> Exclude those variables with 100% NA 
+```{r MissingNess Excluding those empty columns, echo=F, include=F}
+#Checking missingness x ASSIST timeframe
+length(unique(cohortF_Drugs$StudyId))
+
+#check_data(cohortF_Drugs)
+
+ #mplot3_missing(cohortF_Drugs)
+
+ #Meeting_Jenni 1
+#Percentage of missignensss per variable
+# cohortF_Drugs[, which(colMeans(!is.na(cohortF_Drugs)) > 0.9)]
+# 
+# #Excluding those columns which ALL responses were NA
+# not_all_na <- function(x) any(!is.na(x))
+# cohortF_Drugs_wo_All_NA <- cohortF_Drugs %>% select(where(not_all_na))
+# 
+# round((colMeans(is.na(cohortF_Drugs_wo_All_NA)))*100,1)
+# 
+# cohortF_Drugs <- cohortF_Drugs_wo_All_NA
+
+length(unique(cohortF_Drugs$StudyId))
+```
+
+#Here
+
+#Subset the WORSE case scenario for each patient accross our timeframe
+```{r Loading }
+# #L330_D
+# load(file = "~/Library/CloudStorage/Box-Box/UCSF_86/Jain_1986/Output_data/cohortF_Drugs_Lock_Long.RData")
+
+rm(list= ls()[!(ls() %in% c('cohortF_Drugs', 'AlphaColumns', 'Before0', 'After0'))])
+
+length(unique(cohortF_Drugs$StudyId))
+range(cohortF_Drugs$SurveyDate)
+```
+
+#Inspecting Drugs' dataset
+```{r}
+lkf <- function(d,p) names(d)[grep(p,names(d))]
+lkf(cohortF_Drugs,"narcan")
+table(cohortF_Drugs$ast_narcan)
+```
+
+
+```{r Ordering Columns, echo=F, include=F}
+AlphaColumns <- function(x) {
+                      x %>% tibble %>%
+                            select("StudyId", "Age", "BirthSex", "Race", "Hispanic", "Transgender", "SurveyDate","Visit_SurveyDRUGS_Order", sort(colnames(.)))
+}
+
+cohortF_Drugs <- AlphaColumns(cohortF_Drugs)
+```
+
+```{r}
+#rm(list= ls()[!(ls() %in% c('cohortF_Drugs', 'AlphaColumns', 'lkf'))])
+
+cohortF_Drugs_merged <- as.data.frame(cohortF_Drugs)
+
+```
+
+
+
+##1) First, let's inspecting these questions for missingness, consistency, and labels
+```{r Question 2 WHO, include=F, echo=F}
+#QuESTION 2 | In the past three months, how often have you used the substances you mentioned (first drug, second drug, etc)?
+
+#TOBACCO
+
+#ALCOHOL
+
+#CANNABIS
+start <- proc.time()
+
+table(cohortF_Drugs_merged$ast_pot9a, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q2pot = dplyr::case_when(
+   ast_pot2 == "never" ~ 0,
+   ast_pot2 == "once or twice" ~ 2 ,
+   ast_pot2 ==  "monthly" ~ 3,
+   ast_pot2 ==  "weekly" ~ 4,
+   ast_pot2 ==  "daily or almost daily" ~ 6)
+   )
+#
+cohortF_Drugs_merged$Assist_Q2pot <- as.numeric(cohortF_Drugs_merged$Assist_Q2pot)
+
+
+#COCAINE
+#1442	ast_coc2	Substance Use	In the  PAST 3 MONTHS, how often have you used cocaine/crack?
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q2coc = dplyr::case_when(
+   ast_coc2 == "never" ~ 0,
+   ast_coc2 == "once or twice" ~ 2 ,
+   ast_coc2 ==  "monthly" ~ 3,
+   ast_coc2 ==  "weekly" ~ 4,
+   ast_coc2 ==  "daily or almost daily" ~ 6)
+   )
+
+#PRESCRIPTION STIMULANTS
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q2pst = dplyr::case_when(
+   ast_pst2 == "never" ~ 0,
+   ast_pst2 == "once or twice" ~ 2 ,
+   ast_pst2 ==  "monthly" ~ 3,
+   ast_pst2 ==  "weekly" ~ 4,
+   ast_pst2 ==  "daily or almost daily" ~ 6)
+   )
+
+#AMPHETAMINES
+#1449	ast_meth2	Substance Use 	In the PAST 3 MONTHS, how often have you used methamphetamines?
+# cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q2amph = dplyr::case_when(
+#    ast_amph2 == "never" ~ 0,
+#    ast_amph2 == "once or twice" ~ 2 ,
+#    ast_amph2 ==  "monthly" ~ 3,
+#    ast_amph2 ==  "weekly" ~ 4,
+#    ast_amph2 ==  "daily or almost daily" ~ 6)
+#    )
+
+####DESIGNATE INSTRUMENT 
+
+
+#INHALANTS
+#898	ast_inh2	Substance Use	In the PAST 3 MONTHS, how often have you used inhalants?
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q2inh = dplyr::case_when(
+   ast_inh2 == "never" ~ 0,
+   ast_inh2 == "once or twice" ~ 2 ,
+   ast_inh2 ==  "monthly" ~ 3,
+   ast_inh2 ==  "weekly" ~ 4,
+   ast_inh2 ==  "daily or almost daily" ~ 6)
+   )
+
+#SEDATIVES
+#904	ast_sed2	Substance Use	In the PAST 3 MONTHS, how often have you used sedatives or sleeping pills for NON-MEDICAL use?
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q2sed = dplyr::case_when(
+   ast_sed2 == "never" ~ 0,
+   ast_sed2 == "once or twice" ~ 2 ,
+   ast_sed2 ==  "monthly" ~ 3,
+   ast_sed2 ==  "weekly" ~ 4,
+   ast_sed2 ==  "daily or almost daily" ~ 6)
+   )
+
+
+#HALLUCIONOGENS
+#1502	ast_hal2	Substance Use 	 In the PAST 3 MONTHS, how often have you used hallucinogens?
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q2hal = dplyr::case_when(
+   ast_hal2 == "never" ~ 0,
+   ast_hal2 == "once or twice" ~ 2 ,
+   ast_hal2 ==  "monthly" ~ 3,
+   ast_hal2 ==  "weekly" ~ 4,
+   ast_hal2 ==  "daily or almost daily" ~ 6)
+   )
+
+
+#OPIOIDS
+
+table(cohortF_Drugs_merged$ast_opi1, useNA="ifany")
+
+#1470	ast_narc2	Substance Use 	 In the PAST 3 MONTHS, how often have you used narcotic pain meds for NON-MEDICAL use?
+#940	ast_opip2	Substance Use	In the PAST 3 MONTHS, how often have you used prescription opiates for NON-MEDICAL use?
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q2opiPx = dplyr::case_when(
+   ast_opip2 == "never" ~ 0,
+   ast_opip2 == "once or twice" ~ 2 ,
+   ast_opip2 ==  "monthly" ~ 3,
+   ast_opip2 ==  "weekly" ~ 4,
+   ast_opip2 ==  "daily or almost daily" ~ 6)
+   )
+
+#Street (?) OPIOIDS
+table(cohortF_Drugs_merged$ast_opi2, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q2opiSt = dplyr::case_when(
+   ast_opi2 == "never" ~ 0,
+   ast_opi2 == "once or twice" ~ 2 ,
+   ast_opi2 ==  "monthly" ~ 3,
+   ast_opi2 ==  "weekly" ~ 4,
+   ast_opi2 ==  "daily or almost daily" ~ 6)
+   )
+
+#OTHERS (HEROIN?)
+#1456	ast_her2	Substance Use 	In the PAST 3 MONTHS, how often have you used heroin?
+##Correcting ".x"
+
+
+# cohortF_Drugs_merged <- 
+#   cohortF_Drugs_merged %>%
+#  rename_at(.vars = ggplot2::vars(ends_with("her2.x")),
+#               .funs = funs(sub("[.]mean$", "", .)))
+
+
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q2her = dplyr::case_when(
+   ast_her2 == "never" ~ 0,
+   ast_her2 == "once or twice" ~ 2 ,
+   ast_her2 ==  "monthly" ~ 3,
+   ast_her2 ==  "weekly" ~ 4,
+   ast_her2 ==  "daily or almost daily" ~ 6)
+   )
+table(cohortF_Drugs_merged$ast_her2)
+
+# #1463	ast_fen2	Substance Use 	 In the PAST 3 MONTHS, how often have you used fentanyl?
+
+table(cohortF_Drugs_merged$ast_fen2, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q2fen = dplyr::case_when(
+   ast_fen2 == "never" ~ 0,
+   ast_fen2 == "once or twice" ~ 2 ,
+   ast_fen2 ==  "monthly" ~ 3,
+   ast_fen2 ==  "weekly" ~ 4,
+   ast_fen2 ==  "daily or almost daily" ~ 6)
+   )
+#NARC
+#1470	ast_narc2	Substance Use 	 In the PAST 3 MONTHS, how often have you used narcotic pain meds for NON-MEDICAL use?
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q2narc = dplyr::case_when(
+   ast_narc2 == "never" ~ 0,
+   ast_narc2 == "once or twice" ~ 2 ,
+   ast_narc2 ==  "monthly" ~ 3,
+   ast_narc2 ==  "weekly" ~ 4,
+   ast_narc2 ==  "daily or almost daily" ~ 6)
+   )
+
+#MetaAMPHETAMINES
+#1449	ast_meth2	Substance Use 	In the PAST 3 MONTHS, how often have you used methamphetamines?
+table(cohortF_Drugs_merged$ast_meth2, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q2meth = dplyr::case_when(
+   ast_meth2 == "never" ~ 0,
+   ast_meth2 == "once or twice" ~ 2 ,
+   ast_meth2 ==  "monthly" ~ 3,
+   ast_meth2 ==  "weekly" ~ 4,
+   ast_meth2 ==  "daily or almost daily" ~ 6)
+   )
+
+#953	ast_idu2	Substance Use	In the past 6 months, how often did you share injection equipment (needles, syringes, cotton, spoons, etc.) with another person?
+#1511	ast_idu2	Substance Use 	In the past 3 months, how often did you share injection equipment (needles, syringes, cotton, spoons, etc.) with another person?
+```
+
+```{r Question 3 WHO, include=F, echo=F}
+#QuESTION 3 | #1485 During the past three months, how often have you had a strong desire or urge to use (first drug, second drug, etc)?
+  
+#TOBACCO
+
+#ALCOHOL
+
+#CANNABIS
+#ASSIST2019 #1485 pg 102
+table(cohortF_Drugs_merged$ast_pot3, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q3pot = dplyr::case_when(
+   ast_pot3 == "never" ~ 0,
+   ast_pot3 == "once or twice" ~ 3 ,
+   ast_pot3 ==  "monthly" ~ 4,
+   ast_pot3 ==  "weekly" ~ 5,
+   ast_pot3 ==  "daily or almost daily" ~ 6)
+   )
+
+#COCAINE
+#1444	ast_coc3	Substance Use 	During the PAST 3 MONTHS, how often have you had a strong desire or urge to use cocaine/crack?
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q3coc = dplyr::case_when(
+   ast_coc3 == "never" ~ 0,
+   ast_coc3 == "once or twice" ~ 3 ,
+   ast_coc3 ==  "monthly" ~ 4,
+   ast_coc3 ==  "weekly" ~ 5,
+   ast_coc3 ==  "daily or almost daily" ~ 6)
+   )
+
+#PRESCRIPTION STIMULANTS
+#table(cohortF_Drugs_merged$ast_pst3, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q3pst = dplyr::case_when(
+   ast_pst3 == "never" ~ 0,
+   ast_pst3 == "once or twice" ~ 3 ,
+   ast_pst3 ==  "monthly" ~ 4,
+   ast_pst3 ==  "weekly" ~ 5,
+   ast_pst3 ==  "daily or almost daily" ~ 6)
+   )
+#table(cohortF_Drugs_merged$ast_pst3, cohortF_Drugs_merged$Assist_Q3pst, useNA="ifany")
+
+
+#AMPHETAMINES
+#MeetingDiscussion Amph3 <- we don't have this in the codebook, but I'm assuming it s amph3
+#ast_meth3
+#table(cohortF_Drugs_merged$ast_amph3, useNA="ifany")
+# cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q3amph = dplyr::case_when(
+#    ast_amph3 == "never" ~ 0,
+#    ast_amph3 == "once or twice" ~ 3 ,
+#    ast_amph3 ==  "monthly" ~ 4,
+#    ast_amph3 ==  "weekly" ~ 5,
+#    ast_amph3 ==  "daily or almost daily" ~ 6)
+#    )
+
+#INHALANTS
+#table(cohortF_Drugs_merged$ast_inh3, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q3inh = dplyr::case_when(
+   ast_inh3 == "never" ~ 0,
+   ast_inh3 == "once or twice" ~ 3 ,
+   ast_inh3 ==  "monthly" ~ 4,
+   ast_inh3 ==  "weekly" ~ 5,
+   ast_inh3 ==  "daily or almost daily" ~ 6)
+   )
+#table(cohortF_Drugs_merged$ast_inh3, cohortF_Drugs_merged$Assist_Q3inh, useNA="ifany")
+
+
+#SEDATIVES
+#905	ast_sed3	Substance Use	During the PAST 3 MONTHS, how often have you had a strong desire or urge to use sedatives or sleeping pills?
+#1477	ast_sed3	Substance Use 	During the PAST 3 MONTHS, how often have you had a strong desire or urge to use sedatives or sleeping pills?
+#table(cohortF_Drugs_merged$ast_sed3, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q3sed = dplyr::case_when(
+   ast_sed3 == "never" ~ 0,
+   ast_sed3 == "once or twice" ~ 3 ,
+   ast_sed3 ==  "monthly" ~ 4,
+   ast_sed3 ==  "weekly" ~ 5,
+   ast_sed3 ==  "daily or almost daily" ~ 6)
+   )
+#table(cohortF_Drugs_merged$ast_sed3, cohortF_Drugs_merged$Assist_Q3sed, useNA="ifany")
+
+
+#HALLUCIONOGENS
+#917	ast_hal3	Substance Use	During the PAST 3 MONTHS, how often have you had a strong desire or urge to use hallucinogens?
+#1503	ast_hal3	Substance Use 	 During the PAST 3 MONTHS, how often have you had a strong desire or urge to use hallucinogens?
+table(cohortF_Drugs_merged$ast_hal3, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q3hal = dplyr::case_when(
+   ast_hal3 == "never" ~ 0,
+   ast_hal3 == "once or twice" ~ 3 ,
+   ast_hal3 ==  "monthly" ~ 4,
+   ast_hal3 ==  "weekly" ~ 5,
+   ast_hal3 ==  "daily or almost daily" ~ 6)
+   )
+#table(cohortF_Drugs_merged$ast_hal3, cohortF_Drugs_merged$Assist_Q3hal, useNA="ifany")
+
+
+#OPIOIDS
+#941	ast_opip3	Substance Use	During the PAST 3 MONTHS, how often have you had a strong desire or urge to use prescription opiates?
+#table(cohortF_Drugs_merged$ast_opip3, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q3opiPx = dplyr::case_when(
+   ast_opip3 == "never" ~ 0,
+   ast_opip3 == "once or twice" ~ 3 ,
+   ast_opip3 ==  "monthly" ~ 4,
+   ast_opip3 ==  "weekly" ~ 5,
+   ast_opip3 ==  "daily or almost daily" ~ 6)
+   )
+#table(cohortF_Drugs_merged$ast_opip3, cohortF_Drugs_merged$Assist_Q3opiPx, useNA="ifany")
+
+
+#STREET OPIOIDS 935	ast_opis3	Substance Use	During the PAST 3 MONTHS, how often have you had a strong desire or urge to use street opiates?
+#table(cohortF_Drugs_merged$ast_opi3, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q3opiSt = dplyr::case_when(
+   ast_opi3 == "never" ~ 0,
+   ast_opi3 == "once or twice" ~ 3 ,
+   ast_opi3 ==  "monthly" ~ 4,
+   ast_opi3 ==  "weekly" ~ 5,
+   ast_opi3 ==  "daily or almost daily" ~ 6)
+   )
+#table(cohortF_Drugs_merged$ast_opi3, cohortF_Drugs_merged$Assist_Q3opiSt, useNA="ifany")
+
+
+
+
+#OTHERS (HEROIN?)
+#1456	ast_her3	Substance Use 	In the PAST 3 MONTHS, how often have you used heroin?
+table(cohortF_Drugs_merged$ast_her3, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q3her = dplyr::case_when(
+   ast_her3 == "never" ~ 0,
+   ast_her3 == "once or twice" ~ 3 ,
+   ast_her3 ==  "monthly" ~ 4,
+   ast_her3 ==  "weekly" ~ 5,
+   ast_her3 ==  "daily or almost daily" ~ 6)
+   )
+
+#1463	ast_fen3	Substance Use 	 In the PAST 3 MONTHS, how often have you used fentanyl?
+table(cohortF_Drugs_merged$ast_fen3, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q3fen = dplyr::case_when(
+   ast_fen3 == "never" ~ 0,
+   ast_fen3 == "once or twice" ~ 3 ,
+   ast_fen3 ==  "monthly" ~ 4,
+   ast_fen3 ==  "weekly" ~ 5,
+   ast_fen3 ==  "daily or almost daily" ~ 6)
+   )
+
+#NARC
+#1470	ast_narc3	Substance Use 	 In the PAST 3 MONTHS, how often have you used narcotic pain meds for NON-MEDICAL use?
+table(cohortF_Drugs_merged$ast_narc3, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q3narc = dplyr::case_when(
+   ast_narc3 == "never" ~ 0,
+   ast_narc3 == "once or twice" ~ 3 ,
+   ast_narc3 ==  "monthly" ~ 4,
+   ast_narc3 ==  "weekly" ~ 5,
+   ast_narc3 ==  "daily or almost daily" ~ 6)
+   )
+
+#MetaAMPHETAMINES
+#1449	ast_meth3	Substance Use 	In the PAST 3 MONTHS, how often have you used methamphetamines?
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q3meth = dplyr::case_when(
+   ast_meth3 == "never" ~ 0,
+   ast_meth3 == "once or twice" ~ 3 ,
+   ast_meth3 ==  "monthly" ~ 4,
+   ast_meth3 ==  "weekly" ~ 5,
+   ast_meth3 ==  "daily or almost daily" ~ 6)
+   )
+
+```
+
+```{r Question 4 WHO, include=F, echo=F}
+  #QuESTION 4 | During the past three months, how often has your use of (first drug, second drug, etc) led to health, social, legal or financial problems?
+
+  #TOBACCO
+
+#ALCOHOL
+
+#CANNABIS
+#1487	ast_meth5	Substance Use 	During the PAST 3 MONTHS, how often has your use of marijuana led to health, social, legal or financial problems?
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q4pot = dplyr::case_when(
+   ast_pot5 == "never" ~ 0,
+   ast_pot5 == "once or twice" ~ 4 ,
+   ast_pot5 ==  "monthly" ~ 5,
+   ast_pot5 ==  "weekly" ~ 6,
+   ast_pot5 ==  "daily or almost daily" ~ 7)
+   )
+
+
+#COCAINE
+##925	ast_coc5	Substance Use	During the PAST 3 MONTHS, how often has your use of cocaine led to health, social, legal or financial problems?
+#1446	ast_coc5	Substance Use	During the PAST 3 MONTHS, how often has your use of cocaine/crack led to health, social, legal or financial problems?
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q4coc = dplyr::case_when(
+   ast_coc5 == "never" ~ 0,
+   ast_coc5 == "once or twice" ~ 4 ,
+   ast_coc5 ==  "monthly" ~ 5,
+   ast_coc5 ==  "weekly" ~ 6,
+   ast_coc5 ==  "daily or almost daily" ~ 7)
+   )
+
+#PRESCRIPTION STIMULANTS
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q4pst = dplyr::case_when(
+   ast_pst5 == "never" ~ 0,
+   ast_pst5 == "once or twice" ~ 4 ,
+   ast_pst5 ==  "monthly" ~ 5,
+   ast_pst5 ==  "weekly" ~ 6,
+   ast_pst5 ==  "daily or almost daily" ~ 7)
+   )
+
+
+#AMPHETAMINES
+#931	ast_amph5	Substance Use	During the PAST 3 MONTHS, how often has your use of amphetamines led to health, social, legal or financial problems?
+# table(cohortF_Drugs_merged$ast_amph5, useNA="ifany")
+# cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q4amph = dplyr::case_when(
+#    ast_amph5 == "never" ~ 0,
+#    ast_amph5 == "once or twice" ~ 4 ,
+#    ast_amph5 ==  "monthly" ~ 5,
+#    ast_amph5 ==  "weekly" ~ 6,
+#    ast_amph5 ==  "daily or almost daily" ~ 7)
+#    )
+
+
+#INHALANTS
+#901	ast_inh5	Substance Use	During the PAST 3 MONTHS, how often has your use of inhalants led to health, social, legal or financial problems?
+#1499	ast_inh5	Substance Use 	During the PAST 3 MONTHS, how often has your use of inhalants led to health, social, legal or financial problems?
+table(cohortF_Drugs_merged$ast_inh5, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q4inh = dplyr::case_when(
+   ast_inh5 == "never" ~ 0,
+   ast_inh5 == "once or twice" ~ 4 ,
+   ast_inh5 ==  "monthly" ~ 5,
+   ast_inh5 ==  "weekly" ~ 6,
+   ast_inh5 ==  "daily or almost daily" ~ 7)
+   )
+
+#SEDATIVES
+#907	ast_sed5	Substance Use	During the PAST 3 MONTHS, how often has your use of sedatives or sleeping pills led to health, social, legal or financial problems?
+#1479	ast_sed5	Substance Use 	During the PAST 3 MONTHS, how often has your use of sedatives or sleeping pills led to health, social, legal or financial problems?
+table(cohortF_Drugs_merged$ast_sed5, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q4sed = dplyr::case_when(
+   ast_sed5 == "never" ~ 0,
+   ast_sed5 == "once or twice" ~ 4 ,
+   ast_sed5 ==  "monthly" ~ 5,
+   ast_sed5 ==  "weekly" ~ 6,
+   ast_sed5 ==  "daily or almost daily" ~ 7)
+   )
+
+
+#HALLUCIONOGENS
+#919	ast_hal5	Substance Use	During the PAST 3 MONTHS, how often has your use of hallucinogens led to health, social, legal or financial problems?
+#1505	ast_hal5	Substance Use 	During the PAST 3 MONTHS, how often has your use of hallucinogens led to health, social, legal or financial problems?
+table(cohortF_Drugs_merged$ast_hal5, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q4hal = dplyr::case_when(
+   ast_hal5 == "never" ~ 0,
+   ast_hal5 == "once or twice" ~ 4,
+   ast_hal5 ==  "monthly" ~ 5,
+   ast_hal5 ==  "weekly" ~ 6,
+   ast_hal5 ==  "daily or almost daily" ~ 7)
+   )
+
+#OPIOIDS
+#Meetingdiscussion <- we have opi instead of opiS
+#937	ast_opis5	Substance Use	During the PAST 3 MONTHS, how often has your use of street opiates led to health, social, legal or financial problems?
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q4opiSt = dplyr::case_when(
+   ast_opi5 == "never" ~ 0,
+   ast_opi5 == "once or twice" ~ 4,
+   ast_opi5 ==  "monthly" ~ 5,
+   ast_opi5 ==  "weekly" ~ 6,
+   ast_opi5 ==  "daily or almost daily" ~ 7)
+   )
+
+
+#Px OPIOIDS
+#943	ast_opip5	Substance Use	During the PAST 3 MONTHS, how often has your use of prescription opiates led to health, social, legal or financial problems?
+table(cohortF_Drugs_merged$ast_opip5, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q4opiPx = dplyr::case_when(
+   ast_opip5 == "never" ~ 0,
+   ast_opip5 == "once or twice" ~ 4 ,
+   ast_opip5 ==  "monthly" ~ 5,
+   ast_opip5 ==  "weekly" ~ 6,
+   ast_opip5 ==  "daily or almost daily" ~ 7)
+   )
+
+#OTHERS (HEROIN?)
+#1456	ast_her5	Substance Use 	In the PAST 3 MONTHS, how often have you used heroin?
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q5her = dplyr::case_when(
+   ast_her5 == "never" ~ 0,
+   ast_her5 == "once or twice" ~ 4,
+   ast_her5 ==  "monthly" ~ 5,
+   ast_her5 ==  "weekly" ~ 6,
+   ast_her5 ==  "daily or almost daily" ~ 7)
+   )
+
+#1463	ast_fen5	Substance Use 	 In the PAST 3 MONTHS, how often have you used fentanyl?
+table(cohortF_Drugs_merged$ast_fen5, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q5fen = dplyr::case_when(
+   ast_fen5 == "never" ~ 0,
+   ast_fen5 == "once or twice" ~ 4,
+   ast_fen5 ==  "monthly" ~ 5,
+   ast_fen5 ==  "weekly" ~ 6,
+   ast_fen5 ==  "daily or almost daily" ~ 7)
+   )
+
+#NARC
+#1470	ast_narc5	Substance Use 	 In the PAST 3 MONTHS, how often have you used narcotic pain meds for NON-MEDICAL use?
+table(cohortF_Drugs_merged$ast_narc5, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q5narc = dplyr::case_when(
+   ast_narc5 == "never" ~ 0,
+   ast_narc5 == "once or twice" ~ 4,
+   ast_narc5 ==  "monthly" ~ 5,
+   ast_narc5 ==  "weekly" ~ 6,
+   ast_narc5 ==  "daily or almost daily" ~ 7)
+   )
+
+#MetaAMPHETAMINES
+#1449	ast_meth5	Substance Use 	In the PAST 3 MONTHS, how often have you used methamphetamines?
+table(cohortF_Drugs_merged$ast_meth5, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q5meth = dplyr::case_when(
+   ast_meth5 == "never" ~ 0,
+   ast_meth5 == "once or twice" ~ 4,
+   ast_meth5 ==  "monthly" ~ 5,
+   ast_meth5 ==  "weekly" ~ 6,
+   ast_meth5 ==  "daily or almost daily" ~ 7)
+   )
+class(cohortF_Drugs_merged$Assist_Q5meth)
+
+
+```
+  
+```{r Question 5 WHO, include=F, echo=F}
+  #QuESTION 5 | During the past three months, how often have you failed to do what was normally expected of you because of your use of (first drug, second drug, etc)?
+ #TOBACCO
+
+#ALCOHOL
+
+#CANNABIS
+#1486	pg101 Assist 2019
+#Substance Use 	During the past three months, how often have you failed to do what was normally expected of you because of your use of (first drug, second drug, etc)?
+ #TOBACCO
+table(cohortF_Drugs_merged$ast_pot4, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q5pot = dplyr::case_when(
+   ast_pot4 == "never" ~ 0,
+   ast_pot4 == "once or twice" ~ 5 ,
+   ast_pot4 ==  "monthly" ~ 6,
+   ast_pot4 ==  "weekly" ~ 7,
+   ast_pot4 ==  "daily or almost daily" ~ 8)
+   )
+
+
+#COCAINE
+#1445	ast_coc4	During the past three months, how often have you failed to do what was normally expected of you because of your use of (first drug, second drug, etc)?
+table(cohortF_Drugs_merged$ast_coc4, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q5coc = dplyr::case_when(
+   ast_coc4 == "never" ~ 0,
+   ast_coc4 == "once or twice" ~ 5,
+   ast_coc4 ==  "monthly" ~ 6,
+   ast_coc4 ==  "weekly" ~ 7,
+   ast_coc4 ==  "daily or almost daily" ~ 8)
+   )
+
+
+#PRESCRIPTION STIMULANTS
+table(cohortF_Drugs_merged$ast_pst4, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q5pst = dplyr::case_when(
+   ast_pst4 == "never" ~ 0,
+   ast_pst4 == "once or twice" ~ 5 ,
+   ast_pst4 ==  "monthly" ~ 6,
+   ast_pst4 ==  "weekly" ~ 7,
+   ast_pst4 ==  "daily or almost daily" ~ 8)
+   )
+
+#AMPHETAMINES
+#931	ast_amph4	During the past three months, how often have you failed to do what was normally expected of you because of your use of (first drug, second drug, etc)?
+# table(cohortF_Drugs_merged$ast_amph4, useNA="ifany")
+# cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q5amph = dplyr::case_when(
+#    ast_amph4 == "never" ~ 0,
+#    ast_amph4 == "once or twice" ~ 5 ,
+#    ast_amph4 ==  "monthly" ~ 6,
+#    ast_amph4 ==  "weekly" ~ 7,
+#    ast_amph4 ==  "daily or almost daily" ~ 8)
+#    )
+
+#INHALANTS
+#901	ast_inh4	SDuring the past three months, how often have you failed to do what was normally expected of you because of your use of (first drug, second drug, etc)?
+#1499	ast_inh4	During the past three months, how often have you failed to do what was normally expected of you because of your use of (first drug, second drug, etc)?
+table(cohortF_Drugs_merged$ast_inh4, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q5inh = dplyr::case_when(
+   ast_inh4 == "never" ~ 0,
+   ast_inh4 == "once or twice" ~ 5 ,
+   ast_inh4 ==  "monthly" ~ 6,
+   ast_inh4 ==  "weekly" ~ 7,
+   ast_inh4 ==  "daily or almost daily" ~ 8)
+   )
+
+#SEDATIVES
+#907	ast_sed4	During the past three months, how often have you failed to do what was normally expected of you because of your use of (first drug, second drug, etc)?
+#1479	ast_sed4	During the past three months, how often have you failed to do what was normally expected of you because of your use of (first drug, second drug, etc)?
+table(cohortF_Drugs_merged$ast_sed4, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q5sed = dplyr::case_when(
+   ast_sed4 == "never" ~ 0,
+   ast_sed4 == "once or twice" ~ 5,
+   ast_sed4 ==  "monthly" ~ 6,
+   ast_sed4 ==  "weekly" ~ 7,
+   ast_sed4 ==  "daily or almost daily" ~ 8)
+   )
+
+
+#HALLUCIONOGENS
+#919	ast_hal4	
+#1505	ast_hal5	Substance Use 	During the past three months, how often have you failed to do what was normally expected of you because of your use of (first drug, second drug, etc)?
+table(cohortF_Drugs_merged$ast_hal4, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q5hal = dplyr::case_when(
+   ast_hal4 == "never" ~ 0,
+   ast_hal4 == "once or twice" ~ 5 ,
+   ast_hal4 ==  "monthly" ~ 6,
+   ast_hal4 ==  "weekly" ~ 7,
+   ast_hal4 ==  "daily or almost daily" ~ 8)
+   )
+
+#OPIOIDS
+#Meetingdiscussion <- we have opi instead of opiS
+#937	ast_opis5	During the past three months, how often have you failed to do what was normally expected of you because of your use of (first drug, second drug, etc)?
+table(cohortF_Drugs_merged$ast_opi4, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q5opiSt = dplyr::case_when(
+   ast_opi4 == "never" ~ 0,
+   ast_opi4 == "once or twice" ~ 5,
+   ast_opi4 ==  "monthly" ~ 6,
+   ast_opi4 ==  "weekly" ~ 7,
+   ast_opi4 ==  "daily or almost daily" ~ 8)
+   )
+
+#Px OPIOIDS
+#943	ast_opip5	Substance Use	During the past three months, how often have you failed to do what was normally expected of you because of your use of (first drug, second drug, etc)?
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q5opiPx = dplyr::case_when(
+   ast_opip4 == "never" ~ 0,
+   ast_opip4 == "once or twice" ~ 5,
+   ast_opip4 ==  "monthly" ~ 6,
+   ast_opip4 ==  "weekly" ~ 7,
+   ast_opip4 ==  "daily or almost daily" ~ 8)
+   )
+
+#OTHERS (HEROIN?)
+
+#OTHERS (HEROIN?)
+#1456	ast_her2	Substance Use 	In the PAST 3 MONTHS, how often have you used heroin?
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q4her = dplyr::case_when(
+   ast_her4 == "never" ~ 0,
+   ast_her4 == "once or twice" ~ 5,
+   ast_her4 ==  "monthly" ~ 6,
+   ast_her4 ==  "weekly" ~ 7,
+   ast_her4 ==  "daily or almost daily" ~ 8)
+   )
+
+
+#1463	ast_fen4	Substance Use 	 In the PAST 3 MONTHS, how often have you used fentanyl?
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q4fen = dplyr::case_when(
+   ast_fen4 == "never" ~ 0,
+   ast_fen4 == "once or twice" ~ 5,
+   ast_fen4 ==  "monthly" ~ 6,
+   ast_fen4 ==  "weekly" ~ 7,
+   ast_fen4 ==  "daily or almost daily" ~ 8)
+   )
+
+#NARC
+#1470	ast_narc4	Substance Use 	 In the PAST 3 MONTHS, how often have you used narcotic pain meds for NON-MEDICAL use?
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q4narc = dplyr::case_when(
+   ast_narc4 == "never" ~ 0,
+   ast_narc4 == "once or twice" ~ 5,
+   ast_narc4 ==  "monthly" ~ 6,
+   ast_narc4 ==  "weekly" ~ 7,
+   ast_narc4 ==  "daily or almost daily" ~ 8)
+   )
+
+#MetaAMPHETAMINES
+#1449	ast_meth4	Substance Use 	In the PAST 3 MONTHS, how often have you used methamphetamines?
+table(cohortF_Drugs_merged$ast_meth4, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q4meth = dplyr::case_when(
+   ast_meth4 == "never" ~ 0,
+   ast_meth4 == "once or twice" ~ 5,
+   ast_meth4 ==  "monthly" ~ 6,
+   ast_meth4 ==  "weekly" ~ 7,
+   ast_meth4 ==  "daily or almost daily" ~ 8)
+   )
+
+```
+
+
+```{r Question 6 WHO, include=F, echo=F}
+#QuESTION 6 | Has a friend or relative or anyone else ever expressed concern about your use of (first drug, second drug, etc)?
+
+ #TOBACCO
+
+#ALCOHOL
+
+#CANNABIS
+#1488 pg 105 Assist2019
+#ast_meth6	Substance Use 	Has a friend or relative or anyone else ever expressed concern about your use of (first drug, second drug, etc)?
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q6pot = dplyr::case_when(
+   ast_pot6 == "no, never" ~ 0,
+   ast_pot6 == "yes, not past 3 mo" ~ 3 ,
+   ast_pot6 ==  "yes, in past 3 mo" ~ 6)
+   )
+
+table(cohortF_Drugs_merged$ast_pot6, cohortF_Drugs_merged$Assist_Q6pot, useNA="ifany")
+
+#COCAINE
+#1445	ast_coc6	Has a friend or relative or anyone else ever expressed concern about your use of (first drug, second drug, etc)?
+
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q6coc = dplyr::case_when(
+    ast_coc6 == "no, never" ~ 0,
+   ast_coc6 == "yes, not past 3 mo" ~ 3 ,
+   ast_coc6 ==  "yes, in past 3 mo" ~ 6)
+   )
+
+#PRESCRIPTION STIMULANTS
+table(cohortF_Drugs_merged$ast_pst6, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q6pst = dplyr::case_when(
+   ast_pst6 == "no, never" ~ 0,
+   ast_pst6 == "yes, not past 3 mo" ~ 3 ,
+   ast_pst6 ==  "yes, in past 3 mo" ~ 6)
+   )
+
+#AMPHETAMINES
+#931	ast_amph6	Has a friend or relative or anyone else ever expressed concern about your use of (first drug, second drug, etc)?
+# table(cohortF_Drugs_merged$ast_amph6, useNA="ifany")
+# cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q6amph = dplyr::case_when(
+#    ast_amph6 == "no, never" ~ 0,
+#    ast_amph6 == "yes, but not in the past 3 mos" ~ 3 ,
+#    ast_amph6 ==  "yes, in the past 3 mos" ~ 6)
+#    )
+#table(cohortF_Drugs_merged$ast_amph6, cohortF_Drugs_merged$Assist_Q6amph, useNA="ifany")
+
+#INHALANTS
+#901	ast_inh4	Has a friend or relative or anyone else ever expressed concern about your use of (first drug, second drug, etc)?
+#1499	ast_inh4	Has a friend or relative or anyone else ever expressed concern about your use of (first drug, second drug, etc)?
+table(cohortF_Drugs_merged$ast_inh6, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q6inh = dplyr::case_when(
+   ast_inh6 == "no, never" ~ 0,
+   ast_inh6 == "yes, not past 3 mo" ~ 3 ,
+   ast_inh6 ==  "yes, in past 3 mo" ~ 6)
+   )
+
+#SEDATIVES
+#907	ast_sed4	Has a friend or relative or anyone else ever expressed concern about your use of (first drug, second drug, etc)?
+#1479	ast_sed4	Has a friend or relative or anyone else ever expressed concern about your use of (first drug, second drug, etc)?
+table(cohortF_Drugs_merged$ast_sed6, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q6sed = dplyr::case_when(
+   ast_sed6 == "no, never" ~ 0,
+   ast_sed6 == "yes, not past 3 mo" ~ 3 ,
+   ast_sed6 ==  "yes, in past 3 mo" ~ 6)
+   )
+#table(cohortF_Drugs_merged$ast_sed6, cohortF_Drugs_merged$Assist_Q6sed, useNA="ifany")
+
+
+#HALLUCIONOGENS
+#919	ast_hal4	
+#1505	ast_hal5	Substance Use 	DHas a friend or relative or anyone else ever expressed concern about your use of (first drug, second drug, etc)?
+table(cohortF_Drugs_merged$ast_hal6)
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q6hal = dplyr::case_when(
+   ast_hal6 == "no, never" ~ 0,
+   ast_hal6 == "yes, not past 3 mo" ~ 3 ,
+   ast_hal6 ==  "yes, in past 3 mo" ~ 6)
+   )
+
+#OPIOIDS
+#Meetingdiscussion <- we have opi instead of opiS
+#937	ast_opis5	DHas a friend or relative or anyone else ever expressed concern about your use of (first drug, second drug, etc)?
+table(cohortF_Drugs_merged$ast_opis6, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q6opiSt = dplyr::case_when(
+   ast_opi6 == "no, never" ~ 0,
+   ast_opi6 == "yes, not past 3 mo" ~ 3 ,
+   ast_opi6 ==  "yes, in past 3 mo" ~ 6)
+   )
+
+
+#Px OPIOIDS
+#943	ast_opip5	Substance Has a friend or relative or anyone else ever expressed concern about your use of (first drug, second drug, etc)?
+table(cohortF_Drugs_merged$ast_opip6, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q6opiPx = dplyr::case_when(
+   ast_opip6 == "no, never" ~ 0,
+   ast_opip6 == "yes, not past 3 mo" ~ 3 ,
+   ast_opip6 ==  "yes, in past 3 mo" ~ 6)
+   )
+
+
+#OTHERS (HEROIN?)
+#1456	ast_her2	Substance Use 	In the PAST 3 MONTHS, how often have you used heroin?
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q6her = dplyr::case_when(
+   ast_her6 == "no, never" ~ 0,
+   ast_her6 == "yes, not past 3 mo" ~ 3 ,
+   ast_her6 ==  "yes, in past 3 mo" ~ 6)
+   )
+
+
+#1463	ast_fen4	Substance Use 	 In the PAST 3 MONTHS, how often have you used fentanyl?
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q6fen = dplyr::case_when(
+   ast_fen6 == "no, never" ~ 0,
+   ast_fen6 == "yes, not past 3 mo" ~ 3 ,
+   ast_fen6 ==  "yes, in past 3 mo" ~ 6)
+   )
+
+
+
+#NARC
+#1470	ast_narc4	Substance Use 	 In the PAST 3 MONTHS, how often have you used narcotic pain meds for NON-MEDICAL use?
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q6narc = dplyr::case_when(
+   ast_narc6 == "no, never" ~ 0,
+   ast_narc6 == "yes, not past 3 mo" ~ 3 ,
+   ast_narc6 ==  "yes, in past 3 mo" ~ 6)
+   )
+
+
+#MetaAMPHETAMINES
+#1449	ast_meth4	Substance Use 	In the PAST 3 MONTHS, how often have you used methamphetamines?
+table(cohortF_Drugs_merged$ast_meth6)
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q6meth = dplyr::case_when(
+   ast_meth6 == "no, never" ~ 0,
+   ast_meth6 == "yes, not past 3 mo" ~ 3 ,
+   ast_meth6 ==  "yes, in past 3 mo" ~ 6)
+   )
+
+```
+
+ 
+```{r Question 7 WHO, include=F, echo=F}
+  #QuESTION 7 | Have you ever tried to cut down on using (first drug, second drug, etc) but failed?
+
+
+#TOBACCO
+
+#ALCOHOL
+
+#CANNABIS
+#Qx 1489 pg 104 Assist2019
+
+table(cohortF_Drugs_merged$ast_pot7)
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q7pot = dplyr::case_when(
+   ast_pot7 == "no, never" ~ 0,
+   ast_pot7 == "yes, not past 3 mo" ~ 3 ,
+   ast_pot7 ==  "yes, in past 3 mo" ~ 6)
+   )
+
+
+#COCAINE
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q7coc = dplyr::case_when(
+    ast_coc7 == "no, never" ~ 0,
+   ast_coc7 == "yes, not past 3 mo" ~ 3 ,
+   ast_coc7 ==  "yes, in past 3 mo" ~ 6)
+   )
+
+#PRESCRIPTION STIMULANTS
+table(cohortF_Drugs_merged$ast_pst7, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q7pst = dplyr::case_when(
+   ast_pst7 == "no, never" ~ 0,
+   ast_pst7 == "yes, not past 3 mo" ~ 3 ,
+   ast_pst7 ==  "yes, in past 3 mo" ~ 6)
+   )
+
+#AMPHETAMINES
+# cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q7amph = dplyr::case_when(
+#    ast_amph7 == "no, never" ~ 0,
+#    ast_amph7 == "yes, but not in the past 3 mos" ~ 3 ,
+#    ast_amph7 ==  "yes, in the past 3 mos" ~ 6)
+#    )
+
+#INHALANTS
+#901	ast_inh4	Has a friend or relative or anyone else ever expressed concern about your use of (first drug, second drug, etc)?
+#1499	ast_inh4	Has a friend or relative or anyone else ever expressed concern about your use of (first drug, second drug, etc)?
+table(cohortF_Drugs_merged$ast_inh7, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q7inh = dplyr::case_when(
+   ast_inh7 == "no, never" ~ 0,
+   ast_inh7 == "yes, not past 3 mo" ~ 3 ,
+   ast_inh7 ==  "yes, in past 3 mo" ~ 6)
+   )
+
+#SEDATIVES
+#907	ast_sed4	Has a friend or relative or anyone else ever expressed concern about your use of (first drug, second drug, etc)?
+#1479	ast_sed4	Has a friend or relative or anyone else ever expressed concern about your use of (first drug, second drug, etc)?
+table(cohortF_Drugs_merged$ast_sed7, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q7sed = dplyr::case_when(
+   ast_sed7 == "no, never" ~ 0,
+   ast_sed7 == "yes, not past 3 mo" ~ 3 ,
+   ast_sed7 ==  "yes, in past 3 mo" ~ 6)
+   )
+
+#HALLUCIONOGENS
+#919	ast_hal4	
+#1505	ast_hal5	Substance Use 	DHas a friend or relative or anyone else ever expressed concern about your use of (first drug, second drug, etc)?
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q7hal = dplyr::case_when(
+   ast_hal7 == "no, never" ~ 0,
+   ast_hal7 == "yes, not past 3 mo" ~ 3 ,
+   ast_hal7 ==  "yes, in past 3 mo" ~ 6)
+   )
+
+
+#OPIOIDS
+#Meetingdiscussion <- we have opi instead of opiS
+#937	ast_opis5	DHas a friend or relative or anyone else ever expressed concern about your use of (first drug, second drug, etc)?
+table(cohortF_Drugs_merged$ast_opi7, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q7opiSt = dplyr::case_when(
+   ast_opi7 == "no, never" ~ 0,
+   ast_opi7 == "yes, not past 3 mo" ~ 3 ,
+   ast_opi7 ==  "yes, in past 3 mo" ~ 6)
+   )
+
+#Px OPIOIDS
+#943	ast_opip5	Substance Has a friend or relative or anyone else ever expressed concern about your use of (first drug, second drug, etc)?
+table(cohortF_Drugs_merged$ast_opip7, useNA="ifany")
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q7opiPx = dplyr::case_when(
+   ast_opip7 == "no, never" ~ 0,
+   ast_opip7 == "yes, not past 3 mo" ~ 3 ,
+   ast_opip7 ==  "yes, in past 3 mo" ~ 6)
+   )
+
+
+#HEROIN
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q7her = dplyr::case_when(
+   ast_her7 == "no, never" ~ 0,
+   ast_her7 == "yes, not past 3 mo" ~ 3 ,
+   ast_her7 ==  "yes, in past 3 mo" ~ 6)
+   )
+
+
+#FENTANYL
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q7fen = dplyr::case_when(
+   ast_fen7 == "no, never" ~ 0,
+   ast_fen7 == "yes, not past 3 mo" ~ 3 ,
+   ast_fen7 ==  "yes, in past 3 mo" ~ 6)
+   )
+
+
+
+#NARC
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q7narc = dplyr::case_when(
+   ast_narc7 == "no, never" ~ 0,
+   ast_narc7 == "yes, not past 3 mo" ~ 3 ,
+   ast_narc7 ==  "yes, in past 3 mo" ~ 6)
+   )
+
+
+
+#MetaAMPHETAMINES
+cohortF_Drugs_merged <- cohortF_Drugs_merged %>% mutate(Assist_Q7meth = dplyr::case_when(
+   ast_meth7 == "no, never" ~ 0,
+   ast_meth7 == "yes, not past 3 mo" ~ 3 ,
+   ast_meth7 ==  "yes, in past 3 mo" ~ 6)
+   )
+
+cohortF_Drugs <- cohortF_Drugs_merged
+
+
+```
+
+#FIGURING OUT QUESTION ONE --- ASSIST WHO OR ASSIST 1.0???
+```{r, echo=F, include=F}
+names(cohortF_Drugs)
+table(cohortF_Drugs$ast_coc1, useNA="ifany")
+table(cohortF_Drugs$ast_meth1, useNA="ifany")
+table(cohortF_Drugs$ast_pst1, useNA="ifany")
+table(cohortF_Drugs$ast_hal1, useNA="ifany")
+table(cohortF_Drugs$ast_opi1, useNA="ifany")
+table(cohortF_Drugs$ast_opip1, useNA="ifany")
+table(cohortF_Drugs$ast_her1, useNA="ifany")
+table(cohortF_Drugs$ast_fen1, useNA="ifany")
+table(cohortF_Drugs$ast_amph1, useNA="ifany")
+table(cohortF_Drugs$amph1, useNA="ifany")
+table(cohortF_Drugs$ast_meth1, useNA="ifany")
+
+```
+
+#Cleanning enviroment
+```{r}
+rm(list= ls()[!(ls() %in% c('cohortF_Drugs', 'AlphaColumns', 'lkf'))])
+
+```
+
+
+#Calculating the Scores for the Variables we have, so far.
+```{r AssistScores Calculating - sum up Qx by drug, echo=F, include=F}
+#skim(cohortF_Drugs)
+#CANNABIS
+cohortF_Drugs <- cohortF_Drugs %>% rowwise %>%
+  mutate(AssistScore_POT = sum(c(Assist_Q2pot,
+                                 Assist_Q3pot,
+                                 Assist_Q4pot,
+                                    Assist_Q5pot,
+                                    Assist_Q6pot,
+                                    Assist_Q7pot), na.rm=T)
+                               )
+
+var_label(cohortF_Drugs) <- 
+        list(AssistScore_POT = "Marijuana SSI"
+         )
+
+range(cohortF_Drugs$AssistScore_POT, na.rm=T)
+
+
+#COCAINE
+cohortF_Drugs <- cohortF_Drugs %>% rowwise %>%
+  mutate(AssistScore_COCA = sum(c(Assist_Q2coc,
+                               Assist_Q3coc,
+                               Assist_Q4coc,
+                               Assist_Q5coc,
+                               Assist_Q6coc,
+                               Assist_Q7coc), na.rm=T)
+                               )
+var_label(cohortF_Drugs) <- 
+        list(AssistScore_COCA = "Cocaine SSI"
+         )
+table(cohortF_Drugs$AssistScore_COCA, useNA="ifany")
+range(cohortF_Drugs$AssistScore_COCA, na.rm=T)
+
+
+#PRESCRITPION STIMULANTS
+cohortF_Drugs <- cohortF_Drugs %>% rowwise %>%
+  mutate(AssistScore_PxSTIM = sum(c(Assist_Q2pst,
+                               Assist_Q3pst,
+                               Assist_Q4pst,
+                               Assist_Q5pst,
+                                  Assist_Q6pst,
+                               Assist_Q7pst), na.rm=T)
+                               )
+
+
+var_label(cohortF_Drugs) <- 
+        list(AssistScore_PxSTIM = "Px Stimulants SSI"
+         )
+
+# #AMPHETAMINE
+# cohortF_Drugs <- cohortF_Drugs %>% rowwise %>%
+#   mutate(AssistScore_AMPH = sum(c(Assist_Q2amph,
+#                                Assist_Q3amph,
+#                                Assist_Q4amph,
+#                                Assist_Q5amph,
+#                                Assist_Q6amph,
+#                                Assist_Q7amph), na.rm=T)
+#                                )
+# var_label(cohortF_Drugs) <- 
+#         list(AssistScore_AMPH = "Amphetamines SSI"
+#          )
+# table(cohortF_Drugs$AssistScore_AMPH, useNA="ifany")
+# range(cohortF_Drugs$AssistScore_AMPH, na.rm=T)
+
+#INHALANTS
+class(cohortF_Drugs$Assist_Q3inh)
+cohortF_Drugs <- cohortF_Drugs %>% rowwise %>%
+  mutate(AssistScore_INH = sum(c(Assist_Q2inh,
+                               Assist_Q3inh,
+                               Assist_Q4inh,
+                               Assist_Q5inh,
+                               Assist_Q6inh,
+                               Assist_Q7inh), na.rm=T)
+                               )
+
+var_label(cohortF_Drugs) <- 
+        list(AssistScore_INH = "Inhalant SSI"
+         )
+#SEDATIVES
+cohortF_Drugs <- cohortF_Drugs %>% rowwise %>%
+  mutate(AssistScore_SED = sum(c(Assist_Q2sed,
+                               Assist_Q3sed,
+                               Assist_Q4sed,
+                               Assist_Q5sed,
+                               Assist_Q6sed,
+                               Assist_Q7sed), na.rm=T)
+                               )
+
+
+#HALLUCINOGENS
+cohortF_Drugs <- cohortF_Drugs %>% rowwise %>%
+  mutate(AssistScore_HAL = sum(c(Assist_Q2hal,
+                               Assist_Q3hal,
+                               Assist_Q4hal,
+                               Assist_Q5hal,
+                               Assist_Q6hal,
+                               Assist_Q7hal), na.rm=T)
+                               )
+var_label(cohortF_Drugs) <- 
+        list(AssistScore_HAL = "Halucinogens SSI"
+         )
+
+#OPIOIDS Street
+cohortF_Drugs <- cohortF_Drugs %>% rowwise %>%
+  mutate(AssistScore_OpiSt = sum(c(Assist_Q2opiSt,
+                               Assist_Q3opiSt,
+                               Assist_Q4opiSt,
+                               Assist_Q5opiSt,
+                               Assist_Q6opiSt,
+                               Assist_Q7opiSt), na.rm=T)
+                               )
+
+tabyl(cohortF_Drugs$Assist_Q7opiSt)
+
+var_label(cohortF_Drugs) <- 
+        list(AssistScore_OpiSt = "Street Opioids SSI"
+         )
+range(cohortF_Drugs$AssistScore_OpiSt)
+
+#OPIOIDS Px
+cohortF_Drugs <- cohortF_Drugs %>% rowwise %>%
+  mutate(AssistScore_OpiPx = sum(c(Assist_Q2opiPx,
+                               Assist_Q3opiPx,
+                               Assist_Q4opiPx,
+                               Assist_Q5opiPx,
+                               Assist_Q6opiPx,
+                               Assist_Q7opiPx), na.rm=T)
+                               )
+
+var_label(cohortF_Drugs) <- 
+        list(AssistScore_OpiPx = "Px Opioids SSI"
+         )
+#OTHERS
+##HEROIN
+cohortF_Drugs <- cohortF_Drugs %>% rowwise %>%
+  mutate(AssistScore_HER = sum(c(Assist_Q2her,
+                                 Assist_Q3her,
+                                 Assist_Q4her,
+                                    Assist_Q5her,
+                                    Assist_Q6her,
+                                    Assist_Q7her), na.rm=T)
+                               )
+
+var_label(cohortF_Drugs) <- 
+        list(AssistScore_HER = "Heroin SSI"
+         )
+
+#FENTANYL
+cohortF_Drugs <- cohortF_Drugs %>% rowwise %>%
+  mutate(AssistScore_FEN = sum(c(Assist_Q2fen,
+                                 Assist_Q3fen,
+                                 Assist_Q4fen,
+                                    Assist_Q5fen,
+                                    Assist_Q6fen,
+                                    Assist_Q7fen), na.rm=T)
+                               )
+
+var_label(cohortF_Drugs) <-
+        list(AssistScore_FEN = "Fentanyl SSI"
+         )
+
+
+##NARC
+cohortF_Drugs <- cohortF_Drugs %>% rowwise %>%
+  mutate(AssistScore_NARC = sum(c(Assist_Q2narc,
+                                 Assist_Q3narc,
+                                 Assist_Q4narc,
+                                    Assist_Q5narc,
+                                    Assist_Q6narc,
+                                    Assist_Q7narc), na.rm=T)
+                               )
+
+var_label(cohortF_Drugs) <- 
+        list(AssistScore_NARC = "Narcotics SSI"
+         )
+
+##METH
+cohortF_Drugs <- cohortF_Drugs %>% rowwise %>%
+  mutate(AssistScore_METH = sum(c(Assist_Q2meth,
+                                 Assist_Q3meth,
+                                 Assist_Q4meth,
+                                    Assist_Q5meth,
+                                    Assist_Q6meth,
+                                    Assist_Q7meth), na.rm=T)
+                               )
+
+var_label(cohortF_Drugs) <- 
+        list(AssistScore_METH = "Methamphetamines SSI"
+         )
+```
+
+#Section 9
+CLASSIFICATION
+```{r Risk Classification by SSI interval, include=F, echo=F}
+
+# BOx 6 | What do the specific substance involvement scores mean?
+# Alcohol
+# All other substances
+# Lower risk
+# 0-10
+# 0-3
+# Moderate risk
+# 11-26
+# 4-26
+# High risk
+# 27+
+# 27+
+
+cohortF_Drugs$AssistScore_POT <- as.numeric(cohortF_Drugs$AssistScore_POT)
+cohortF_Drugs <- transform(
+  cohortF_Drugs, AssistRiskScore_CAN = ifelse(AssistScore_POT <=3, "Low risk", 
+                             ifelse(AssistScore_POT >=4 & AssistScore_POT <=26, "Moderate risk",
+                                    ifelse(AssistScore_POT >= 27 , "High risk", "")))
+                                    )
+ # Convert to factor
+   cohortF_Drugs$AssistRiskScore_CAN <- factor(cohortF_Drugs$AssistRiskScore_CAN,
+      level = c("Low risk","Moderate risk","High risk"))
+tabyl(cohortF_Drugs, AssistRiskScore_CAN, AssistScore_POT)
+
+
+###COCAINE
+   cohortF_Drugs <- transform(
+  cohortF_Drugs, AssistRiskScore_COCA = ifelse(AssistScore_COCA <=3, "Low risk", 
+                             ifelse(AssistScore_COCA >=4 & AssistScore_COCA <=26, "Moderate risk",
+                                    ifelse(AssistScore_COCA >= 27 , "High risk", "")))
+                                    )
+ # Convert to factor
+   cohortF_Drugs$AssistRiskScore_COCA <- factor(cohortF_Drugs$AssistRiskScore_COCA,
+      level = c("Low risk","Moderate risk","High risk"))
+######################   
+# cohortF_Drugs <- cohortF_Drugs %>% 
+#   mutate(
+#     AssistRiskScore_COCA = case_when(
+#       AssistScore_COCA <= 3 ~ "Lower risk",
+#       AssistScore_COCA >=4 & AssistScore_COCA <=26 ~ "Moderate risk",
+#       AssistScore_COCA >=27 ~ "High risk"
+#       
+#     ),
+# 
+#     # Convert to factor
+#     AssistRiskScore_COCA = factor( AssistRiskScore_COCA,
+#       level = c("Lower risk","Moderate risk","High risk")
+#     )
+#   )
+# 
+# table(cohortF_Drugs$AssistRiskScore_COCA, cohortF_Drugs$AssistScore_COCA, useNA="ifany")
+# 
+
+
+#PRESCRIPTION STIMULANT
+   cohortF_Drugs <- transform(
+  cohortF_Drugs, AssistRiskScore_PxStim = ifelse(AssistScore_PxSTIM <=3, "Low risk", 
+                             ifelse(AssistScore_PxSTIM >=4 & AssistScore_PxSTIM <=26, "Moderate risk",
+                                    ifelse(AssistScore_PxSTIM >= 27 , "High risk", "")))
+                                    )
+ # Convert to factor
+   cohortF_Drugs$AssistRiskScore_PxStim <- factor(cohortF_Drugs$AssistRiskScore_PxStim,
+      level = c("Low risk","Moderate risk","High risk"))
+######################
+# #AMPHETAMINE
+# cohortF_Drugs <- cohortF_Drugs %>% 
+#   mutate(
+#     AssistRiskScore_AMPH = case_when(
+#       AssistScore_AMPH <= 3 ~ "Lower risk",
+#       AssistScore_AMPH >=4 & AssistScore_AMPH <=26 ~ "Moderate risk",
+#       AssistScore_AMPH >=27 ~ "High risk"
+#       
+#     ),
+# 
+#     # Convert to factor
+#     AssistRiskScore_AMPH = factor( AssistRiskScore_AMPH,
+#       level = c("Lower risk","Moderate risk","High risk")
+#     )
+#   )
+# 
+# table(cohortF_Drugs$AssistRiskScore_AMPH, cohortF_Drugs$AssistScore_AMPH, useNA="ifany")
+# # AmphMean  <- mean(cohortF_Drugs$AssistScore_AMPH, na.rm=T)
+# 
+# cohortF_Drugs <- cohortF_Drugs %>% 
+#   mutate(
+#     AmphMeanRisk = case_when(
+#       AmphMean <= 3 ~ "Lower risk",
+#       AmphMean >=4 & AmphMean <=26 ~ "Moderate risk",
+#       AmphMean >=27 ~ "High risk")
+#   )
+
+#INHALANTS
+   cohortF_Drugs <- transform(
+  cohortF_Drugs, AssistRiskScore_INH = ifelse(AssistScore_INH <=3, "Low risk", 
+                             ifelse(AssistScore_INH >=4 & AssistScore_INH <=26, "Moderate risk",
+                                    ifelse(AssistScore_INH >= 27 , "High risk", "")))
+                                    )
+ # Convert to factor
+   cohortF_Drugs$AssistRiskScore_INH <- factor(cohortF_Drugs$AssistRiskScore_INH,
+      level = c("Low risk","Moderate risk","High risk"))
+
+#SEDATIVE
+cohortF_Drugs <- transform(
+  cohortF_Drugs, AssistRiskScore_SED = ifelse(AssistScore_SED <=3, "Low risk", 
+                             ifelse(AssistScore_SED >=4 & AssistScore_SED <=26, "Moderate risk",
+                                    ifelse(AssistScore_SED >= 27 , "High risk", "")))
+                                    )
+ # Convert to factor
+   cohortF_Drugs$AssistRiskScore_SED <- factor(cohortF_Drugs$AssistRiskScore_SED,
+      level = c("Low risk","Moderate risk","High risk"))
+
+
+#HALUCINOGENS
+cohortF_Drugs <- transform(
+  cohortF_Drugs, AssistRiskScore_HAL = ifelse(AssistScore_HAL <=3, "Low risk", 
+                             ifelse(AssistScore_HAL >=4 & AssistScore_HAL <=26, "Moderate risk",
+                                    ifelse(AssistScore_HAL >= 27 , "High risk", "")))
+                                    )
+ # Convert to factor
+   cohortF_Drugs$AssistRiskScore_HAL <- factor(cohortF_Drugs$AssistRiskScore_HAL,
+      level = c("Low risk","Moderate risk","High risk"))
+
+
+
+#STREEET OPIOIDS
+   table(cohortF_Drugs$AssistScore_OpiSt, useNA="ifany")
+cohortF_Drugs <- cohortF_Drugs %>% 
+  mutate(
+    AssistRiskScore_OpiSt = case_when(
+      AssistScore_OpiSt <= 3 ~ "Low risk",
+      AssistScore_OpiSt >=4 & AssistScore_OpiSt <=26 ~ "Moderate risk",
+      AssistScore_OpiSt >=27 ~ "High risk"
+      
+    ),
+
+    # Convert to factor
+    AssistRiskScore_OpiSt = factor( AssistRiskScore_OpiSt,
+      level = c("Low risk","Moderate risk","High risk")
+    )
+  )
+
+range(cohortF_Drugs$AssistScore_OpiSt)
+table(cohortF_Drugs$AssistScore_OpiSt,cohortF_Drugs$AssistRiskScore_OpiSt)
+#PX OPIOIDS
+cohortF_Drugs <- cohortF_Drugs %>% 
+  mutate(
+    AssistRiskScore_OpiPx = case_when(
+      AssistScore_OpiPx <= 3 ~ "Low risk",
+      AssistScore_OpiPx >=4 & AssistScore_OpiPx <=26 ~ "Moderate risk",
+      AssistScore_OpiPx >=27 ~ "High risk"
+      
+    ),
+
+    # Convert to factor
+    AssistRiskScore_OpiPx = factor( AssistRiskScore_OpiPx,
+      level = c("Low risk","Moderate risk","High risk")
+    )
+  )
+
+#Heroin
+cohortF_Drugs <- cohortF_Drugs %>% 
+  mutate(
+    AssistRiskScore_Her = case_when(
+      AssistScore_HER <= 3 ~ "Low risk",
+      AssistScore_HER >=4 & AssistScore_HER <=26 ~ "Moderate risk",
+      AssistScore_HER >=27 ~ "High risk"
+      
+    ),
+
+    # Convert to factor
+    AssistRiskScore_Her = factor( AssistRiskScore_Her,
+      level = c("Low risk","Moderate risk","High risk")
+    )
+  )
+
+
+#Fentanyl
+cohortF_Drugs <- cohortF_Drugs %>%
+  mutate(
+    AssistRiskScore_FEN = case_when(
+      AssistScore_FEN <= 3 ~ "Low risk",
+      AssistScore_FEN >=4 & AssistScore_FEN <=26 ~ "Moderate risk",
+      AssistScore_FEN >=27 ~ "High risk"
+
+    ),
+
+    # Convert to factor
+    AssistRiskScore_FEN = factor( AssistRiskScore_FEN,
+      level = c("Low risk","Moderate risk","High risk")
+    )
+  )
+
+
+
+#Narcotics
+cohortF_Drugs <- cohortF_Drugs %>% 
+  mutate(
+    AssistRiskScore_NARC = case_when(
+      AssistScore_NARC <= 3 ~ "Low risk",
+      AssistScore_NARC >=4 & AssistScore_NARC <=26 ~ "Moderate risk",
+      AssistScore_NARC >=27 ~ "High risk"
+      
+    ),
+
+    # Convert to factor
+    AssistRiskScore_NARC = factor( AssistRiskScore_NARC,
+      level = c("Low risk","Moderate risk","High risk")
+    )
+  )
+
+
+
+#Methamphetamines
+cohortF_Drugs <- cohortF_Drugs %>% 
+  mutate(
+    AssistRiskScore_METH = case_when(
+      AssistScore_METH <= 3 ~ "Low risk",
+      AssistScore_METH >=4 & AssistScore_METH <=26 ~ "Moderate risk",
+      AssistScore_METH >=27 ~ "High risk"
+      
+    ),
+
+    # Convert to factor
+    AssistRiskScore_METH = factor( AssistRiskScore_METH,
+      level = c("Low risk","Moderate risk","High risk")
+    )
+  )
+```
+
+
+
+```{r OrderingColumns, echo=F, include=F}
+#Sorting column names
+cohortF_Drugs <- setDT(cohortF_Drugs)
+
+#Function for sorting the variables by alphabetical order
+
+cohortF_Drugs <- AlphaColumns(cohortF_Drugs)
+```
+
+
+```{r ConvertingInCharacter, echo=F, include=F}
+#Converting chr to factor
+cohortF_Drugs[sapply(cohortF_Drugs, is.character)] <- lapply(cohortF_Drugs[sapply(cohortF_Drugs, is.character)],as.factor)
+```
+
+
+#Selecting variables
+##In your life time, which have you ever used? RECODING accordingly to ASSIST points / scoring
+```{r Overdose, echo=F, include=F}
+#0 1508	ast_od	Substance Use 	In the last 6 months, how many times have you overdosed (OD'd) on drugs? [including heroin, fentanyl or pills]
+#1 Identifying the variables depicting drugs last 3 yeears
+
+conflict_prefer("apply_labels", "crosstable")
+
+
+cohortF_Drugs <- cohortF_Drugs %>% mutate(ast_1508_od = case_when(
+   ast_od == "1" ~ "0",
+   ast_od == "2" ~ "1"  ,
+   ast_od == "3" ~ "2",
+      ast_od == "4" ~ "3",
+   ast_od == "5" ~ ">=4",
+      TRUE ~ as.character(ast_od)))
+
+cohortF_Drugs <- cohortF_Drugs %>% mutate(ast_1508_od = factor(ast_1508_od, levels = c("0", "1", "2","3",">=4")))
+
+cohortF_Drugs <- apply_labels(cohortF_Drugs,
+                      ast_1508_od = "Non-Fatal Drug Overdose in the Past Six Months"
+                      )
+
+
+table(cohortF_Drugs$ast_1508_od, useNA="ifany")
+
+```
+
+
+```{r Last 3 mos use, echo=F, include=F}
+#Labelling the 3 months battery 
+cohortF_Drugs <- apply_labels(cohortF_Drugs,
+                      ast_pot2_Bn = "Cannabis 3 mos",
+                      ast_coc2_Bn = "Cocaine 3 mos",
+                      ast_amph2_Bn = "Amphetamine 3 mos",
+                      ast_inh2_Bn = "Inhalant 3 mos",
+                      ast_sed2_Bn = "Sedative 3 mos",
+                      ast_hal2_Bn = "Halucinogen 3 mos",
+                      ast_opip2_Bn = "Px opioid 3 mos",
+                      ast_opi2_Bn = "Street opioid 3 mos",
+                      ast_pst2_Bn = "Px stimulants 3 mos",
+                      ast_meth2_Bn = "Methamphetamines 3 mos",
+                      ast_narc2_Bn = "Narcotics 3 mos",
+                      ast_her2_Bn = "Heroin 3 mos",
+                      ast_fen2_Bn = "Fentanyl 3 mos",
+                      ast_1508_od = "Non-Fatal Drug Overdose in the Past Six Months")
+```
+
+
+#PAST 3 MONTHS battery
+```{r 3MonthsDrugs - Use last 3 mos, echo=F, include=F}
+
+cohortF_Drugs$ast_pot2_Bn <- ifelse(cohortF_Drugs$ast_pot2 != "never",1, 0)
+
+cohortF_Drugs$ast_coc2_Bn <- ifelse(cohortF_Drugs$ast_coc2 != "never", 1, 0)
+
+cohortF_Drugs$ast_pst2_Bn <- ifelse(cohortF_Drugs$ast_pst2 != "never", 1, 0)
+
+cohortF_Drugs$ast_inh2_Bn <- ifelse(cohortF_Drugs$ast_inh2 != "never", 1, 0)
+
+cohortF_Drugs$ast_sed2_Bn <- ifelse(cohortF_Drugs$ast_sed2 != "never", 1, 0)
+
+cohortF_Drugs$ast_hal2_Bn <- ifelse(cohortF_Drugs$ast_hal2 != "never", 1, 0)
+
+cohortF_Drugs$ast_opi2_Bn <- ifelse(cohortF_Drugs$ast_opi2 != "never", 1, 0)
+
+cohortF_Drugs$ast_opip2_Bn <- ifelse(cohortF_Drugs$ast_opip2 != "never", 1, 0)
+
+cohortF_Drugs$ast_her2_Bn <- ifelse(cohortF_Drugs$ast_her2 != "never" ,1,0)
+
+cohortF_Drugs$ast_fen2_Bn <- ifelse(cohortF_Drugs$ast_fen2 != "never", 1, 0)
+
+cohortF_Drugs$ast_narc2_Bn <- ifelse(cohortF_Drugs$ast_narc2 != "never", 1, 0)
+
+cohortF_Drugs$ast_meth2_Bn <- ifelse(cohortF_Drugs$ast_meth2 != "never",1, 0)
+
+#14431443	ast_coc9a	Substance Use	How did you use cocaine/crack in the past 3 months? Please check all that apply.
+```
+
+#Polysubstance Scoring
+```{r PolySubstance, echo=F, include=F}
+#POLYSUBSTANCE
+##3 MONTHS
+##Here, for each visit I'm calculating their "PolySubstance" status during the Last 3 months!
+##After, I'll pick the "worse score / status"
+cohortF_Drugs <- cohortF_Drugs %>% rowwise %>%
+  mutate(PolyScore = sum(c(ast_pot2_Bn, 
+                             ast_coc2_Bn, 
+                             ast_pst2_Bn,
+                             
+                             ast_inh2_Bn, 
+                             ast_sed2_Bn,
+                             ast_hal2_Bn, 
+                             ast_opi2_Bn,
+                             ast_opip2_Bn,
+                           ast_fen2,
+                           ast_her2_Bn,
+                           ast_narc2_Bn,
+                           ast_meth2_Bn), na.rm=T)
+         )
+
+
+table(cohortF_Drugs$PolyScore, useNA = "ifany")
+
+```
+
+
+#Plysubstance 2 | 3 drugs
+```{r OUTCOME PolySubstance_Jenni, echo=F, include=F}
+#As suggested by Jenni --> 28dec2022 "...Here "poly" is two or more drugs and "poly3" is three or more drugs, these are both used in the literature. For our purposes we should probably go with two or more drugs in the past three months as this is more meaningful than ever/lifetime..."
+
+cohortF_Drugs <- transform(
+  cohortF_Drugs, Poly2cat = ifelse(PolyScore >=2, "Polysubstance 2Drugs last 3 mths (>= 2 drugs)", 
+                             ifelse(PolyScore ==1, "No polysubstance last 3 mths (just One drug)",
+                                    ifelse(PolyScore == 0 ,"No drug use last 3 mths", "")))
+                          )
+               
+  cohortF_Drugs <- transform(
+  cohortF_Drugs, PolyTwo_Bn = ifelse(PolyScore >=2, "Polysubstance Drugs last 3 mths (>= 2 drugs)", 
+                             ifelse(PolyScore <2, "No polysubstance (< 2 drugs) last 3 mths", ""))
+                             )
+
+   # Convert to factor
+   cohortF_Drugs$PolyTwo_Bn <- factor(cohortF_Drugs$PolyTwo_Bn,
+      level = c("No polysubstance (< 2 drugs) last 3 mths","Polysubstance Drugs last 3 mths (>= 2 drugs)"))
+
+   # Convert to factor
+   cohortF_Drugs$Poly2cat <- factor(cohortF_Drugs$Poly2cat,
+      level = c("No drug use last 3 mths","No polysubstance last 3 mths (just One drug)","Polysubstance 2Drugs last 3 mths (>= 2 drugs)"))
+
+#Label
+   cohortF_Drugs <- apply_labels(cohortF_Drugs,
+                      PolyTwo_Bn = "Polysubstance, >=2 Drugs - Bn")
+#Label
+   cohortF_Drugs <- apply_labels(cohortF_Drugs,
+                      Poly2cat = "Polysubstance, >=2 Drugs")
+   
+table(cohortF_Drugs$PolyTwo_Bn, cohortF_Drugs$Poly2cat )
+   
+   
+   
+#3 Drugs
+cohortF_Drugs <- cohortF_Drugs %>%
+            mutate(Poly3cat = case_when(
+              PolyScore >=3 ~ "Polysubstance 3Drugs last 3 mths (>= 3 drugs)",
+            PolyScore ==1 | PolyScore ==2 ~ "No polysubstance last 3 mths (One or Two drugs)",
+            PolyScore == 0 ~ "No drug use last 3 mths",
+              PolyScore == "NA" ~ "Missing")
+   )
+
+
+cohortF_Drugs$Poly3cat <- factor(cohortF_Drugs$Poly3cat,
+      level = c("No drug use last 3 mths","No polysubstance last 3 mths (One or Two drugs)","Polysubstance 3Drugs last 3 mths (>= 3 drugs)"))
+
+cohortF_Drugs <- apply_labels(cohortF_Drugs,
+                      Poly3cat = "Polysubstance (c/o >=3 Drugs")
+
+
+#Variable
+ cohortF_Drugs <- transform(
+  cohortF_Drugs, PolyThree_Bn = ifelse(PolyScore >=3,"Polysubstance 3Drugs last 3 mths (>= 3 drugs)", 
+                             ifelse(PolyScore <3,  "No polysubstance last 3 mths", ""))
+                             )
+   # Convert to factor
+   cohortF_Drugs$PolyThree_Bn <- factor(cohortF_Drugs$PolyThree_Bn,
+      level = c("No polysubstance last 3 mths","Polysubstance 3Drugs last 3 mths (>= 3 drugs)"))
+  #Label
+    cohortF_Drugs <- apply_labels(cohortF_Drugs,
+                      PolyThree_Bn = "Polysubstance (c/o >=3 Drugs) - Bn")
+
+   
+```
+
+
+
+
+```{r AnyDRUG_Severity}
+
+```
+
+##OUTCOME VARIABLES
+"...As we discussed earlier, we should begin by coding the following three dichotomous variables which can be explored as methential outcome variables;
+
+#Data is in long format
+##I must pick up the worse case for each patient and their earlier visit
+1) Any substance use disorder including those with severe SSI scores
+
+
+```{r CleaningEnviroment}
+#rm(list= ls()[!(ls() %in% c('cohortF_Drugs'))])
+
+```
+
+```{r Canabis}
+ #<- WorseBef_SSI_MARI[WorseBef_SSI_MARI[, .I[Visit_SurveyDRUGS_Order == 1], by=StudyId]$V1]
+
+
+```
+#Risk Classification
+```{r RiskClassification by DRUG SSIscore, echo=F, include=F}
+
+#Canabis
+cohortF_Drugs$MARI_Severe <- ifelse(cohortF_Drugs$AssistScore_POT >= 27, 1, 0)
+cohortF_Drugs$MARI_SevMod <- ifelse(cohortF_Drugs$AssistScore_POT >= 4, 1, 0)
+
+var_label(cohortF_Drugs) <- 
+        list(MARI_Severe = "Severe Risk",
+             MARI_SevMod = "Severe or Moderate Risk"
+         )
+
+#Cocaine
+cohortF_Drugs$COCA_Severe <- ifelse(cohortF_Drugs$AssistScore_COCA >= 27, 1, 0)
+cohortF_Drugs$COCA_SevMod <- ifelse(cohortF_Drugs$AssistScore_COCA >= 4, 1, 0)
+
+var_label(cohortF_Drugs) <- 
+        list(COCA_Severe = "Severe Risk",
+             COCA_SevMod = "Severe or Moderate Risk"
+         )
+#Px Stimulants
+cohortF_Drugs$PxStim_Severe <- ifelse(cohortF_Drugs$AssistScore_PxSTIM >= 27, 1, 0)
+cohortF_Drugs$PxStim_SevMod <- ifelse(cohortF_Drugs$AssistScore_PxSTIM >= 4, 1, 0)
+
+var_label(cohortF_Drugs) <- 
+        list(PxStim_Severe = "Severe Risk",
+             PxStim_SevMod = "Severe or Moderate Risk"
+         )
+
+#Metahmphetamines
+cohortF_Drugs$METH_Severe <- ifelse(cohortF_Drugs$AssistScore_METH >= 27, 1, 0)
+cohortF_Drugs$METH_SevMod <- ifelse(cohortF_Drugs$AssistScore_METH >= 4, 1, 0)
+
+var_label(cohortF_Drugs) <- 
+        list(METH_Severe = "Severe Risk",
+             METH_SevMod = "Severe or Moderate Risk"
+         )
+
+#Inhalants
+cohortF_Drugs$INH_Severe <- ifelse(cohortF_Drugs$AssistScore_INH >= 27, 1, 0)
+cohortF_Drugs$INH_SevMod <- ifelse(cohortF_Drugs$AssistScore_INH >= 4, 1, 0)
+
+var_label(cohortF_Drugs) <- 
+        list(INH_Severe = "Severe Risk",
+             INH_SevMod = "Severe or Moderate Risk"
+         )
+
+#Sedatives
+cohortF_Drugs$SED_Severe <- ifelse(cohortF_Drugs$AssistScore_SED >= 27, 1, 0)
+cohortF_Drugs$SED_SevMod <- ifelse(cohortF_Drugs$AssistScore_SED >= 4, 1, 0)
+
+var_label(cohortF_Drugs) <- 
+        list(SED_Severe = "Severe Risk",
+             SED_SevMod = "Severe or Moderate Risk"
+         )
+
+#Hallucinogens
+cohortF_Drugs$HAL_Severe <- ifelse(cohortF_Drugs$AssistScore_HAL >= 27, 1, 0)
+cohortF_Drugs$HAL_SevMod <- ifelse(cohortF_Drugs$AssistScore_HAL >= 4, 1, 0)
+
+var_label(cohortF_Drugs) <- 
+        list(HAL_Severe = "Severe Risk",
+             HAL_SevMod = "Severe or Moderate Risk"
+         )
+
+#Px Opioids
+cohortF_Drugs$OpiPx_Severe <- ifelse(cohortF_Drugs$AssistScore_OpiPx >= 27, 1, 0)
+cohortF_Drugs$OpiPx_SevMod <- ifelse(cohortF_Drugs$AssistScore_OpiPx >= 4, 1, 0)
+
+var_label(cohortF_Drugs) <- 
+        list(OpiPx_Severe = "Severe Risk",
+             OpiPx_SevMod = "Severe or Moderate Risk"
+         )
+
+#Street Opioids
+cohortF_Drugs$OpiSt_Severe <- ifelse(cohortF_Drugs$AssistScore_OpiSt >= 27, 1, 0)
+cohortF_Drugs$OpiSt_SevMod <- ifelse(cohortF_Drugs$AssistScore_OpiSt >= 4, 1, 0)
+
+var_label(cohortF_Drugs) <- 
+        list(OpiSt_Severe = "Severe Risk",
+             OpiSt_SevMod = "Severe or Moderate Risk"
+         )
+
+#Heroin
+cohortF_Drugs$HER_Severe <- ifelse(cohortF_Drugs$AssistScore_HER >= 27, 1, 0)
+cohortF_Drugs$HER_SevMod <- ifelse(cohortF_Drugs$AssistScore_HER >= 4, 1, 0)
+
+var_label(cohortF_Drugs) <- 
+        list(HER_Severe = "Severe Risk",
+             HER_SevMod = "Severe or Moderate Risk"
+         )
+
+#Narcotics
+cohortF_Drugs$NARC_Severe <- ifelse(cohortF_Drugs$AssistScore_NARC >= 27, 1, 0)
+cohortF_Drugs$NARC_SevMod <- ifelse(cohortF_Drugs$AssistScore_NARC >= 4, 1, 0)
+
+var_label(cohortF_Drugs) <- 
+        list(NARC_Severe = "Severe Risk",
+             NARC_SevMod = "Severe or Moderate Risk"
+         )
+
+#Fentanyl
+table(cohortF_Drugs$AssistScore_FEN, useNA="ifany")
+cohortF_Drugs$FEN_Severe <- ifelse(cohortF_Drugs$AssistScore_FEN >= 27, 1, 0)
+cohortF_Drugs$FEN_SevMod <- ifelse(cohortF_Drugs$AssistScore_FEN >= 4, 1, 0)
+
+var_label(cohortF_Drugs) <- 
+        list(FEN_Severe = "Severe Risk",
+             FEN_SevMod = "Severe or Moderate Risk"
+         )
+
+
+
+```
+
+
+   
+```{r Outcome --> ANY Sev | SevMod, echo=F, include=F}
+cohortF_Drugs <- cohortF_Drugs %>% rowwise %>%
+  mutate(AnySeverePOINTS = sum(c(MARI_Severe,
+                                 COCA_Severe,
+                                 PxStim_Severe,
+                                    
+                                    INH_Severe,
+                                    SED_Severe,
+                                 HAL_Severe,
+                                 OpiPx_Severe,
+                                 OpiSt_Severe,
+                                 HER_Severe,
+                                 NARC_Severe,
+                                 METH_Severe,
+                                 FEN_Severe), na.rm=T)
+                               )
+
+var_label(cohortF_Drugs) <- 
+        list(AnySeverePOINTS = "Sum Severe SSI"
+         )
+
+cohortF_Drugs$AnySevere <- ifelse(cohortF_Drugs$AnySeverePOINTS >= 1, "Severe SSI", "NON-Severe")
+table(cohortF_Drugs$AnySevere, useNA="ifany")
+
+var_label(cohortF_Drugs) <- 
+        list(AnySevere = "Any Severe Risk"
+         )
+
+#SevMod
+cohortF_Drugs <- cohortF_Drugs %>% rowwise %>%
+  mutate(AnySevModPOINTS = sum(c(MARI_SevMod,
+                                 COCA_SevMod,
+                                 PxStim_SevMod,
+                                    
+                                 INH_SevMod,
+                                 SED_SevMod,
+                                 HAL_SevMod,
+                                 OpiPx_SevMod,
+                                 OpiSt_SevMod,
+                                 HER_SevMod,
+                                 NARC_SevMod,
+                                 METH_SevMod,
+                                FEN_SevMod), na.rm=T)
+                               )
+
+var_label(cohortF_Drugs) <- 
+        list(AnySevModPOINTS = "Sum Severe | Moderate SSI"
+         )
+
+cohortF_Drugs$AnySevMod <- ifelse(cohortF_Drugs$AnySevModPOINTS >= 1, "Any Severe | Moderate Risk", "Non-Severe & Non-Moderate Risk")
+table(cohortF_Drugs$AnySevMod, useNA="ifany")
+
+var_label(cohortF_Drugs) <- 
+        list(AnySevMod = "Any Severe | Moderate Risks"
+         )
+```
+
+
+
+###I'm making that chunks invisible, since I'm not seeking for the Worse, so far###
+
+```{r Cleaning Enviroment}
+#rm(list= ls()[!(ls() %in% c('cohortF_Drugs'))])
+
+#cohortF_Drugs <- as.data.frame(cohortF_Drugs)
+```
+##########STEP
+
+#BASELINE
+```{r Filtering 1st Visit BASELINE , echo=F, include=F}
+SSI_SevMod_Base <- cohortF_Drugs %>%
+  subset(Visit_SurveyDRUGS_Order==1)
+
+SSI_SevMod_Base <- as.data.frame(SSI_SevMod_Base)
+
+```
+
+
+```{r Renaming_3mo_binary, echo=F, include=F}
+#Labelling the 3 months battery 
+SSI_SevMod_Base <- apply_labels(SSI_SevMod_Base,
+                      ast_pot2_Bn = "Cannabis 3 mos",
+                      ast_coc2_Bn = "Cocaine 3 mos",
+                      
+                      ast_inh2_Bn = "Inhalants 3 mos",
+                      ast_sed2_Bn = "Sedative 3 mos",
+                      ast_hal2_Bn = "Halucinogen 3 mos",
+                      ast_opip2_Bn = "Px opioid 3 mos",
+                      ast_opi2_Bn = "Street opioid 3 mos",
+                      ast_pst2_Bn = "Px stimulants 3 mos",
+                      ast_her2_Bn = "Heroin 3 mos",
+                        ast_narc2_Bn ="Narcotics 3 mos", 
+                        ast_meth2_Bn = "Methamphetamine 3 mos",
+                        ast_fen2_Bn = "Fentanyl 3mos",
+                      ast_1508_od = "Non-Fatal Drug Overdose in the Past Six Months ")
+
+
+cohortF_Drugs <- apply_labels(cohortF_Drugs,
+                      ast_pot2_Bn = "Cannabis 3 mos",
+                      ast_coc2_Bn = "Cocaine 3 mos",
+                      
+                      ast_inh2_Bn = "Inhalants 3 mos",
+                      ast_sed2_Bn = "Sedative 3 mos",
+                      ast_hal2_Bn = "Halucinogen 3 mos",
+                      ast_opip2_Bn = "Px opioid 3 mos",
+                      ast_opi2_Bn = "Street opioid 3 mos",
+                      ast_pst2_Bn = "Px stimulants 3 mos",
+                      ast_her2_Bn = "Heroin 3 mos",
+                        ast_narc2_Bn ="Narcotics 3 mos", 
+                        ast_meth2_Bn = "Methamphetamine 3 mos",
+                        ast_fen2_Bn = "Fentanyl 3mos")
+```
+
+```{r Editing Tables, echo=F, include=F}
+reset_gtsummary_theme()
+theme_gtsummary_journal(journal = "lancet")
+#> Setting theme `JAMA`
+theme_gtsummary_compact()
+#> Setting theme `Compact`
+
+```
+
+```{r}
+#rm(list= ls()[!(ls() %in% c('cohortF_Drugs','SSI_SevMod_Base'))])
+
+save(cohortF_Drugs, SSI_SevMod_Base, file = "~/Library/CloudStorage/Box-Box/UCSF_86/Jain_1986/Output_data/cohortF_Drugs_Drugs_SevMod.RData")
+```
+
+```{r Baseline Risk, echo=F, include=F}
+TabMari <- SSI_SevMod_Base %>%
+ select( c("StudyId", "Site", "Age", "Race", "BirthSex", "AnySevMod", "AnySevere","ast_1508_od", "ast_pot2_Bn", "ast_coc2_Bn",
+  "ast_pst2_Bn",              "ast_meth2_Bn",             "ast_inh2_Bn",             "ast_sed2_Bn",            
+  "ast_hal2_Bn",              "ast_opi2_Bn",              "ast_opip2_Bn",             "ast_her2_Bn",            
+  "ast_fen2_Bn",              "ast_narc2_Bn", "AssistRiskScore_CAN", "AssistRiskScore_COCA",   "AssistRiskScore_PxStim" , "AssistRiskScore_HAL", "AssistRiskScore_Her",   
+"AssistRiskScore_INH", "AssistRiskScore_METH",   "AssistRiskScore_NARC",   "AssistRiskScore_OpiPx",  "AssistRiskScore_OpiSt", 
+ "AssistRiskScore_SED", "AssistRiskScore_FEN","AssistScore_COCA",       "AssistScore_FEN",        "AssistScore_HAL",       
+ "AssistScore_HER",        "AssistScore_INH",        "AssistScore_METH",       "AssistScore_NARC",       "AssistScore_OpiPx",     
+ "AssistScore_OpiSt",      "AssistScore_POT",        "AssistScore_PxSTIM",     "AssistScore_SED" ,"PolyTwo_Bn","PolyThree_Bn"  )
+ )
+names(SSI_SevMod_Base)
+ TabSevMod <- TabMari %>%
+  tbl_summary(by=AnySevMod, missing="no",
+              
+              
+    statistic = list(all_continuous() ~ "{p50} [{p25}-{p75}]; {mean} ({sd})",
+                     all_categorical() ~ "{n} / {N} ({p}%)"),
+     digits = all_continuous() ~ 0
+              
+              
+              ) %>%
+             add_p(pvalue_fun = ~style_pvalue(.x, digits = 2),simulate.p.value=TRUE ) %>%
+  add_overall() %>%
+  add_n() %>% 
+  # remove studyId row
+  modify_table_body(filter, !(variable == "StudyId"))  %>%
+  remove_row_type(BirthSex, type = "level", c("Male", "Intersexed")) %>%
+   remove_row_type(Race, type = "level", c("")) %>%
+  modify_header(label ~ "**Variable**") %>%
+  modify_spanning_header(c("stat_1", "stat_2") ~ "**Any Severe | Moderate SSI Score**") %>%
+  modify_footnote(
+    all_stat_cols() ~ "Median (IQR) or Frequency (%); Mean (SD); (min-max)"
+  ) %>%
+  modify_caption("**Table X  Characteristics of a Cohort of People Living with HIV Enrolled in the CFAR Network of Integrated Clinical Systems (CNICS) between 2018 and 2022 (N=XXXX)	by SSI score (Severe) for ANY respective substance at Baseline Visit**") %>%
+  bold_labels() %>% 
+gtsummary::as_gt() %>%             # convert to gt table
+gt::tab_source_note(gt::md("*Jennis's study / CNICS 06feb2023*")) 
+
+ 
+  TabSevMod %>% gt::gtsave(             # save table as image
+    filename = "~/Library/CloudStorage/Box-Box/UCSF_86/Jain_1986/Reports/Tables_Figs/SevereMod_SSI.html", inline_css = TRUE)
+
+TabSevMod
+
+```
+
+Cocaine
+Prescription stimulant use in the past 3 months
+Methamphetamine
+Inhalants
+Sedatives
+Hallucinogens
+Street opioids
+Prescription opioids
+Other drugs
+Polysubstance use (i.e., two or more of the aforementioned drugs)
+
+```{r Split by Lockdown , echo=F, include=F}
+# Spliting btw Lockdown Before and After
+
+Before <- cohortF_Drugs %>%
+  filter(Lockdown=="Before")
+length(unique(Before$StudyId))
+
+After <- cohortF_Drugs %>%
+  filter(Lockdown=="After")
+length(unique(After$StudyId))
+
+Before <- as.data.frame(Before)
+setDT(Before)
+After <- as.data.frame(After)
+setDT(After)
+
+length(unique(Before$StudyId))
+length(unique(After$StudyId))
+
+
+```
+########
+#########
+########
+
+
+
+
+
+
+<!-- #Preparing to pick the worse score for each phase -->
+<!-- #Picking the worse score for each individual AND the earlier visit -->
+<!-- ```{r MARIJUANA SSI, echo=F, include=F} -->
+<!-- ##MARIJUANA -->
+<!-- setDT(cohortF_Drugs) -->
+<!-- WorseBef_SSI_MARI <- Before[Before[, .I[AssistScore_POT == max(AssistScore_POT)], by=StudyId]$V1] -->
+<!-- WorseAft_SSI_MARI <- After[After[, .I[AssistScore_POT == max(AssistScore_POT)], by=StudyId]$V1] -->
+
+<!-- WorseBef_SSI_MARI <- WorseBef_SSI_MARI[WorseBef_SSI_MARI[, .I[Visit_SurveyDRUGS_Order == min(Visit_SurveyDRUGS_Order)], by=StudyId]$V1] -->
+<!-- WorseAft_SSI_MARI <- WorseAft_SSI_MARI[WorseAft_SSI_MARI[, .I[Visit_SurveyDRUGS_Order == min(Visit_SurveyDRUGS_Order)], by=StudyId]$V1] -->
+
+<!-- WorseBef_SSI_MARI$MARI_Severe <- ifelse(WorseBef_SSI_MARI$AssistScore_POT >= 27, 1, 0) -->
+<!-- WorseBef_SSI_MARI$MARI_SevMod <- ifelse(WorseBef_SSI_MARI$AssistScore_POT >= 4, 1, 0) -->
+
+<!-- WorseAft_SSI_MARI$MARI_Severe <- ifelse(WorseAft_SSI_MARI$AssistScore_POT >= 27, 1, 0) -->
+<!-- WorseAft_SSI_MARI$MARI_SevMod <- ifelse(WorseAft_SSI_MARI$AssistScore_POT >= 4, 1, 0) -->
+
+<!-- #table(Worse_SSI_MARI$MARI_Severe, useNA="ifany") -->
+<!-- var_label(WorseBef_SSI_MARI) <-  -->
+<!--         list(MARI_Severe = "Severe Risk", -->
+<!--              MARI_SevMod = "Severe or Moderate Risk" -->
+<!--          ) -->
+
+<!-- var_label(WorseAft_SSI_MARI) <-  -->
+<!--         list(MARI_Severe = "Severe Risk", -->
+<!--              MARI_SevMod = "Severe or Moderate Risk" -->
+<!--          ) -->
+
+
+<!-- Worse_Bef_Pot <- WorseBef_SSI_MARI %>% -->
+<!--   select(c("StudyId", "Visit_SurveyDRUGS_Order","MARI_Severe","MARI_SevMod")) -->
+<!-- Worse_Aft_Pot <- WorseAft_SSI_MARI %>% -->
+<!--   select(c("StudyId", "Visit_SurveyDRUGS_Order","MARI_Severe","MARI_SevMod")) -->
+
+<!-- POT <- merge(cohortF_Drugs, Worse_Bef_Pot, by = c("StudyId", "Visit_SurveyDRUGS_Order"), all.x=T) -->
+<!-- POT <- merge(POT, Worse_Aft_Pot, by = c("StudyId", "Visit_SurveyDRUGS_Order"), all.x=T) -->
+
+
+
+<!-- TabMari <- POT %>% -->
+<!--  select( c("StudyId","Age", "AgeCat", "BirthSex",  "Race", "AssistScore_POT", "MARI_Severe.y", "MARI_Severe.y","MARI_Severe.x", "Lockdown",, "MARI_SevMod.x")) -->
+
+
+<!--  TabMari <- TabMari %>% -->
+<!--    tbl_summary(by=MARI_SevMod.x, missing="no") %>% -->
+<!--               add_p(pvalue_fun = ~style_pvalue(.x, digits = 2)) %>% -->
+<!--    add_overall() %>% -->
+<!--    add_n() %>%  -->
+<!--    # remove studyId row -->
+<!--    modify_table_body(filter, !(variable == "StudyId"))  %>% -->
+<!--    modify_header(label ~ "**Variable**") %>% -->
+<!--    modify_spanning_header(c("stat_1", "stat_2") ~ "**MARIJUANA SSI Score c/o=27**") %>% -->
+<!--    modify_footnote( -->
+<!--      all_stat_cols() ~ "Median (IQR) or Frequency (%)" -->
+<!--   ) %>% -->
+<!--   modify_caption("**Table X  Characteristics of a Cohort of People Living with HIV Enrolled in the CFAR Network of Integrated Clinical Systems (CNICS) between 2018 and 2022 (N=XXXX)	by Worse SSI score (Severe) for the respective substance**") %>% -->
+<!--   bold_labels() %>% -->
+<!-- gtsummary::as_gt() %>%             # convert to gt table -->
+<!-- gt::tab_source_note(gt::md("*Jennis's study / CNICS 13sep2022*")) -->
+
+<!--  TabMari  -->
+<!-- #  TabMari %>% gt::gtsave(             # save table as image -->
+<!-- #     filename = "~/Library/CloudStorage/Box-Box/UCSF_86/Jain_1986/Reports/Tables_Figs/MARI_Sev_SSI.html", inline_css = TRUE) -->
+<!-- #  -->
+<!-- # TabMari -->
+<!-- ``` -->
+
+<!-- ```{r COCAINE SSI, echo=F, include=F} -->
+<!-- ##COCAINE -->
+<!-- Worse_SSI_coca <- cohortF_Drugs[cohortF_Drugs[, .I[AssistScore_COCA == max(AssistScore_COCA)], by=StudyId]$V1] -->
+<!-- #Alternative: group %>% group_by(Subject) %>% top_n(1, pt) -->
+<!-- length(unique(Worse_SSI_coca$StudyId)) -->
+<!-- ##Each patient has its own "worse scroe for each drug" -->
+<!-- #Selecting just the "earlier visit" for demographic data -->
+<!-- Worse_SSI_coca <- Worse_SSI_coca[Worse_SSI_coca[, .I[Visit_SurveyDRUGS_Order == min(Visit_SurveyDRUGS_Order)], by=StudyId]$V1] -->
+
+<!-- TabMari <- Worse_SSI_coca %>% -->
+<!--   select( c("StudyId","Age","Visit_SurveyDRUGS_Order", "AgeCat", "BirthSex",  "Race", "AssistScore_COCA", "COCA_Severe", "COCA_SevMod")) -->
+<!-- #  -->
+<!-- # TabMari <- TabMari %>% -->
+<!-- #   tbl_summary(by=COCA_Severe, missing="no") %>% -->
+<!-- #              add_p(pvalue_fun = ~style_pvalue(.x, digits = 2)) %>% -->
+<!-- #   add_overall() %>% -->
+<!-- #   add_n() %>%  -->
+<!-- #   # remove studyId row -->
+<!-- #   modify_table_body(filter, !(variable == "StudyId"))  %>% -->
+<!-- #   modify_header(label ~ "**Variable**") %>% -->
+<!-- #   modify_spanning_header(c("stat_1", "stat_2") ~ "**COCAINE SSI Score c/o=27**") %>% -->
+<!-- #   modify_footnote( -->
+<!-- #     all_stat_cols() ~ "Median (IQR) or Frequency (%)" -->
+<!-- #   ) %>% -->
+<!-- #   modify_caption("**Table X  Characteristics of a Cohort of People Living with HIV Enrolled in the CFAR Network of Integrated Clinical Systems (CNICS) between 2018 and 2022 (N=XXXX)	by Worse SSI score (Severe) for the respective substance**") %>% -->
+<!-- #   bold_labels() %>%  -->
+<!-- # gtsummary::as_gt() %>%             # convert to gt table -->
+<!-- # gt::tab_source_note(gt::md("*Jennis's study / CNICS 13sep2022*"))  -->
+<!-- #  -->
+<!-- #  TabMari %>% gt::gtsave(             # save table as image -->
+<!-- #     filename = "~/Library/CloudStorage/Box-Box/UCSF_86/Jain_1986/Reports/Tables_Figs/COCA_Sev_SSI.html", inline_css = TRUE) -->
+<!-- # TabMari -->
+<!-- ``` -->
+
+<!-- ```{r Px STIMULANTS SSI, echo=F, include=F} -->
+<!-- ##PxSTIM -->
+<!-- Worse_SSI_PxStim <- cohortF_Drugs[cohortF_Drugs[, .I[AssistScore_PxSTIM == max(AssistScore_PxSTIM)], by=StudyId]$V1] -->
+<!-- #Alternative: group %>% group_by(Subject) %>% top_n(1, pt) -->
+<!-- length(unique(Worse_SSI_PxStim$StudyId)) -->
+<!-- ##Each patient has its own "worse scroe for each drug" -->
+<!-- #Selecting just the "earlier visit" for demographic data -->
+<!-- Worse_SSI_PxStim <- Worse_SSI_PxStim[Worse_SSI_PxStim[, .I[Visit_SurveyDRUGS_Order == min(Visit_SurveyDRUGS_Order)], by=StudyId]$V1] -->
+
+<!-- ``` -->
+
+<!-- ```{r AMPHETAMINES SSI , echo=F, include=F} -->
+<!-- ##AMPH -->
+<!-- Worse_SSI_Meth <- cohortF_Drugs[cohortF_Drugs[, .I[AssistScore_METH == max(AssistScore_METH)], by=StudyId]$V1] -->
+<!-- #Alternative: group %>% group_by(Subject) %>% top_n(1, pt) -->
+<!-- length(unique(Worse_SSI_Meth$StudyId)) -->
+<!-- ##Each patient has its own "worse scroe for each drug" -->
+<!-- #Selecting just the "earlier visit" for demographic data -->
+<!-- Worse_SSI_Meth <- Worse_SSI_Meth[Worse_SSI_Meth[, .I[Visit_SurveyDRUGS_Order == min(Visit_SurveyDRUGS_Order)], by=StudyId]$V1] -->
+
+<!-- ``` -->
+
+
+<!-- ```{r INHALANTS , echo=F, include=F} -->
+
+<!-- ##INH -->
+<!-- Worse_SSI_INH <- cohortF_Drugs[cohortF_Drugs[, .I[AssistScore_INH == max(AssistScore_INH)], by=StudyId]$V1] -->
+<!-- #Alternative: group %>% group_by(Subject) %>% top_n(1, pt) -->
+<!-- length(unique(Worse_SSI_INH$StudyId)) -->
+<!-- ##Each patient has its own "worse scroe for each drug" -->
+<!-- #Selecting just the "earlier visit" for demographic data -->
+<!-- Worse_SSI_INH <- Worse_SSI_INH[Worse_SSI_INH[, .I[Visit_SurveyDRUGS_Order == min(Visit_SurveyDRUGS_Order)], by=StudyId]$V1] -->
+
+<!-- ``` -->
+
+<!-- ```{r SEDATIVES SSI , echo=F, include=F} -->
+<!-- ##SED -->
+<!-- Worse_SSI_SED <- cohortF_Drugs[cohortF_Drugs[, .I[AssistScore_SED == max(AssistScore_SED)], by=StudyId]$V1] -->
+<!-- #Alternative: group %>% group_by(Subject) %>% top_n(1, pt) -->
+<!-- length(unique(Worse_SSI_SED$StudyId)) -->
+<!-- ##Each patient has its own "worse scroe for each drug" -->
+<!-- #Selecting just the "earlier visit" for demographic data -->
+<!-- Worse_SSI_SED <- Worse_SSI_SED[Worse_SSI_SED[, .I[Visit_SurveyDRUGS_Order == min(Visit_SurveyDRUGS_Order)], by=StudyId]$V1] -->
+
+<!-- ``` -->
+
+<!-- ```{r HALUCINOGENS, echo=F, include=F} -->
+<!-- ##HAL -->
+<!-- Worse_SSI_HAL <- cohortF_Drugs[cohortF_Drugs[, .I[AssistScore_HAL == max(AssistScore_HAL)], by=StudyId]$V1] -->
+<!-- #Alternative: group %>% group_by(Subject) %>% top_n(1, pt) -->
+<!-- length(unique(Worse_SSI_HAL$StudyId)) -->
+<!-- ##Each patient has its own "worse scroe for each drug" -->
+<!-- #Selecting just the "earlier visit" for demographic data -->
+<!-- Worse_SSI_HAL <- Worse_SSI_HAL[Worse_SSI_HAL[, .I[Visit_SurveyDRUGS_Order == min(Visit_SurveyDRUGS_Order)], by=StudyId]$V1] -->
+
+<!-- ``` -->
+
+<!-- ```{r PxOPIOIDS SSI} -->
+<!-- ##OPIPx -->
+<!-- Worse_SSI_OpiPx <- cohortF_Drugs[cohortF_Drugs[, .I[AssistScore_OpiPx == max(AssistScore_OpiPx)], by=StudyId]$V1] -->
+<!-- #Alternative: group %>% group_by(Subject) %>% top_n(1, pt) -->
+<!-- length(unique(Worse_SSI_OpiPx$StudyId)) -->
+<!-- ##Each patient has its own "worse scroe for each drug" -->
+<!-- #Selecting just the "earlier visit" for demographic data -->
+<!-- Worse_SSI_OpiPx <- Worse_SSI_OpiPx[Worse_SSI_OpiPx[, .I[Visit_SurveyDRUGS_Order == min(Visit_SurveyDRUGS_Order)], by=StudyId]$V1] -->
+
+<!-- ``` -->
+
+<!-- ```{r StOPIOIDS SSI, echo=F, include=F} -->
+<!-- ##OpiSt -->
+<!-- Worse_SSI_OpiSt <- cohortF_Drugs[cohortF_Drugs[, .I[AssistScore_OpiSt == max(AssistScore_OpiSt)], by=StudyId]$V1] -->
+<!-- #Alternative: group %>% group_by(Subject) %>% top_n(1, pt) -->
+<!-- length(unique(Worse_SSI_OpiSt$StudyId)) -->
+<!-- ##Each patient has its own "worse scroe for each drug" -->
+<!-- #Selecting just the "earlier visit" for demographic data -->
+<!-- Worse_SSI_OpiSt <- Worse_SSI_OpiSt[Worse_SSI_OpiSt[, .I[Visit_SurveyDRUGS_Order == min(Visit_SurveyDRUGS_Order)], by=StudyId]$V1] -->
+
+
+<!-- ``` -->
+
+<!-- ```{r HeroinSSI, echo=F, include=F} -->
+<!-- ##HER -->
+<!-- Worse_SSI_HER <- cohortF_Drugs[cohortF_Drugs[, .I[AssistScore_HER == max(AssistScore_HER)], by=StudyId]$V1] -->
+<!-- #Alternative: group %>% group_by(Subject) %>% top_n(1, pt) -->
+<!-- length(unique(Worse_SSI_HER$StudyId)) -->
+<!-- ##Each patient has its own "worse scroe for each drug" -->
+<!-- #Selecting just the "earlier visit" for demographic data -->
+<!-- Worse_SSI_HER <- Worse_SSI_HER[Worse_SSI_HER[, .I[Visit_SurveyDRUGS_Order == min(Visit_SurveyDRUGS_Order)], by=StudyId]$V1] -->
+
+
+<!-- ``` -->
+
+<!-- ```{r FentanylSSI, echo=F, include=F} -->
+
+<!-- ``` -->
+
+<!-- ```{r NarcoticsSSI, echo=F, include=F} -->
+<!-- ##OpiSt -->
+<!-- Worse_SSI_NARC <- cohortF_Drugs[cohortF_Drugs[, .I[AssistScore_NARC == max(AssistScore_NARC)], by=StudyId]$V1] -->
+<!-- #Alternative: group %>% group_by(Subject) %>% top_n(1, pt) -->
+<!-- length(unique(Worse_SSI_NARC$StudyId)) -->
+<!-- ##Each patient has its own "worse scroe for each drug" -->
+<!-- #Selecting just the "earlier visit" for demographic data -->
+<!-- Worse_SSI_NARC <- Worse_SSI_NARC[Worse_SSI_NARC[, .I[Visit_SurveyDRUGS_Order == min(Visit_SurveyDRUGS_Order)], by=StudyId]$V1] -->
+
+
+<!-- ``` -->
+
+<!-- ```{r MethamphetaminesSSI, echo=F, include=F} -->
+<!-- ##METH -->
+<!-- Worse_SSI_METH <- cohortF_Drugs[cohortF_Drugs[, .I[AssistScore_METH == max(AssistScore_METH)], by=StudyId]$V1] -->
+<!-- #Alternative: group %>% group_by(Subject) %>% top_n(1, pt) -->
+<!-- length(unique(Worse_SSI_METH$StudyId)) -->
+<!-- ##Each patient has its own "worse scroe for each drug" -->
+<!-- #Selecting just the "earlier visit" for demographic data -->
+<!-- Worse_SSI_METH <- Worse_SSI_METH[Worse_SSI_METH[, .I[Visit_SurveyDRUGS_Order == min(Visit_SurveyDRUGS_Order)], by=StudyId]$V1] -->
+
+
+<!-- ``` -->
+
+<!-- ```{r Fentanyl SSI, echo=F, include=F} -->
+<!-- ##Meeting -->
+<!-- Worse_SSI_FEN <- cohortF_Drugs[cohortF_Drugs[, .I[AssistScore_FEN == max(AssistScore_FEN)], by=StudyId]$V1] -->
+<!-- #Alternative: group %>% group_by(Subject) %>% top_n(1, pt) -->
+<!-- length(unique(Worse_SSI_FEN$StudyId)) -->
+<!-- ##Each patient has its own "worse scroe for each drug" -->
+<!-- #Selecting just the "earlier visit" for demographic data -->
+<!-- Worse_SSI_FEN <- Worse_SSI_FEN[Worse_SSI_FEN[, .I[Visit_SurveyDRUGS_Order == min(Visit_SurveyDRUGS_Order)], by=StudyId]$V1] -->
+
+
+<!-- ``` -->
+
+
+
+<!-- ```{r PrepPing Table SEVERE OUTCOME, echo=F, include=F} -->
+<!-- #Any substance use disorder variable -->
+<!-- ##Must merge the columns 8345 (each column will correspond to each substance "worse" score) -->
+<!-- ###SELECTING THE COLUMNs -->
+<!-- library(tidyverse) -->
+
+<!--  Worse_SSI_MARI <- Worse_SSI_MARI %>% -->
+<!--    select(StudyId,MARI_Severe, MARI_SevMod) -->
+
+<!--  Worse_SSI_coca <- Worse_SSI_coca %>% -->
+<!--    select(StudyId, COCA_Severe, COCA_SevMod) -->
+
+<!--  Worse_SSI_PxStim <- Worse_SSI_PxStim %>% -->
+<!--    select(StudyId, PxStim_Severe, PxStim_SevMod) -->
+
+<!--  #Worse_SSI_Amph <- Worse_SSI_Amph %>% -->
+<!--   # select(StudyId, AMPH_Severe, AMPH_SevMod) -->
+
+<!--  Worse_SSI_INH <- Worse_SSI_INH %>% -->
+<!--    select(StudyId, INH_Severe, INH_SevMod) -->
+
+<!--  Worse_SSI_SED <- Worse_SSI_SED %>% -->
+<!--    select(StudyId,SED_Severe, SED_SevMod) -->
+
+<!--  Worse_SSI_HAL <- Worse_SSI_HAL %>% -->
+<!--    select(StudyId, HAL_Severe, HAL_SevMod) -->
+
+<!--  Worse_SSI_OpiPx <- Worse_SSI_OpiPx %>% -->
+<!--    select(StudyId, OpiPx_Severe, OpiPx_SevMod) -->
+
+<!--  Worse_SSI_OpiSt <- Worse_SSI_OpiSt %>% -->
+<!--    select(StudyId, OpiSt_Severe, OpiSt_SevMod) -->
+
+<!--  Worse_SSI_HER <- Worse_SSI_HER %>% -->
+<!--    select(StudyId, HER_Severe, HER_SevMod) -->
+
+<!--  Worse_SSI_NARC <- Worse_SSI_NARC %>% -->
+<!--    select(StudyId, NARC_Severe, NARC_SevMod) -->
+
+<!--  Worse_SSI_METH <- Worse_SSI_METH %>% -->
+<!--    select(StudyId, METH_Severe, METH_SevMod) -->
+
+<!--  Worse_SSI_FEN <- Worse_SSI_FEN %>% -->
+<!--     select(StudyId, FEN_Severe, FEN_SevMod) -->
+<!--  #  -->
+<!-- ``` -->
+<!-- ##Here01feb2023 -->
+<!-- #MERGING -->
+<!-- ```{r Merging them, echo=F, include=F}  -->
+<!-- MARI_COCA <- merge(Worse_SSI_MARI, Worse_SSI_coca, by = "StudyId", all=T) -->
+<!-- MARI_COCA_PxSTIM <- merge(MARI_COCA, Worse_SSI_PxStim, by = "StudyId", all=T) -->
+<!-- #MARI_COCA_PxSTIM_AMPH <- merge(MARI_COCA_PxSTIM, Worse_SSI_Amph, by = "StudyId", all=T) -->
+<!-- ##We don't have that variable  -->
+<!-- MARI_COCA_PxSTIM_AMPH <- MARI_COCA_PxSTIM -->
+<!-- MARI_COCA_PxSTIM_AMPH_INH <- merge(MARI_COCA_PxSTIM_AMPH, Worse_SSI_INH, by = "StudyId", all=T) -->
+<!-- MARI_COCA_PxSTIM_AMPH_INH_SED <- merge(MARI_COCA_PxSTIM_AMPH_INH, Worse_SSI_SED, by = "StudyId", all=T) -->
+<!-- MARI_COCA_PxSTIM_AMPH_INH_SED_HAL <- merge(MARI_COCA_PxSTIM_AMPH_INH_SED, Worse_SSI_HAL, by = "StudyId", all=T) -->
+<!-- MARI_COCA_PxSTIM_AMPH_INH_SED_HAL_OpiPx <- merge(MARI_COCA_PxSTIM_AMPH_INH_SED_HAL, Worse_SSI_OpiPx, by = "StudyId", all=T) -->
+<!-- MARI_COCA_PxSTIM_AMPH_INH_SED_HAL_OpiPx_OpiSt <- merge(MARI_COCA_PxSTIM_AMPH_INH_SED_HAL_OpiPx, Worse_SSI_OpiSt, by = "StudyId", all=T) -->
+<!-- MARI_COCA_PxSTIM_AMPH_INH_SED_HAL_OpiPx_OpiSt_HER <- merge(MARI_COCA_PxSTIM_AMPH_INH_SED_HAL_OpiPx_OpiSt, Worse_SSI_HER, by = "StudyId", all=T) -->
+<!-- MARI_COCA_PxSTIM_AMPH_INH_SED_HAL_OpiPx_OpiSt_HER_NARC <- merge(MARI_COCA_PxSTIM_AMPH_INH_SED_HAL_OpiPx_OpiSt_HER, Worse_SSI_NARC, by = "StudyId", all=T) -->
+<!-- MARI_COCA_PxSTIM_AMPH_INH_SED_HAL_OpiPx_OpiSt_HER_NARC_METH <- merge(MARI_COCA_PxSTIM_AMPH_INH_SED_HAL_OpiPx_OpiSt_HER_NARC, Worse_SSI_METH, by = "StudyId", all=T) -->
+<!-- MARI_COCA_PxSTIM_AMPH_INH_SED_HAL_OpiPx_OpiSt_HER_NARC_METH_FEN <- merge(MARI_COCA_PxSTIM_AMPH_INH_SED_HAL_OpiPx_OpiSt_HER_NARC_METH, Worse_SSI_FEN, by = "StudyId", all=T) -->
+
+
+<!-- SSI_SevMod <- MARI_COCA_PxSTIM_AMPH_INH_SED_HAL_OpiPx_OpiSt_HER_NARC_METH_FEN -->
+
+<!-- rm(list= ls()[!(ls() %in% c('SSI_SevMod', "cohortF_Drugs"))]) -->
+
+<!-- ``` -->
+
+
+
+
+<!-- ```{r PolySubstance, echo=F, include=F} -->
+<!-- #POLYSUBSTANCE -->
+
+<!-- # Creating Polysubstance use variable for EVER and 3 MONTH -->
+<!-- ### -->
+<!-- #Count -->
+<!-- length(unique(cohortF_Drugs$StudyId)) -->
+<!-- #8435 unique subjects -->
+<!-- #21612 observations -->
+<!-- table(cohortF_Drugs$ast_pot1_Bn) -->
+
+<!-- ##EVER -->
+<!-- ##Here, for each visit I'm calculating their "PolySubstance" status -->
+<!-- ##After, I'll pick the "worse score / status" -->
+
+<!--   #   cohortF_Drugs <- cohortF_Drugs %>% rowwise %>% -->
+<!--   # mutate(N_Poly_ever = sum(c(ast_pot1_Bn,  -->
+<!--   #                            ast_coc1_Bn,  -->
+<!--   #                            ast_pst1_Bn, -->
+<!--   #                            ast_amph1_Bn, -->
+<!--   #                            ast_inh1_Bn,  -->
+<!--   #                            ast_sed1_Bn, -->
+<!--   #                            ast_hal1_Bn,  -->
+<!--   #                            ast_opi1_Bn, -->
+<!--   #                            ast_opip1_Bn), na.rm=T) -->
+<!--   #        ) -->
+<!--   #  -->
+<!--   #  -->
+<!--   #   range(cohortF_Drugs$N_Poly_ever, na.rm=T) -->
+<!--   #   table(cohortF_Drugs$N_Poly_ever, useNA="ifany") -->
+
+<!-- ##3 MONTHS -->
+<!-- ##Here, for each visit I'm calculating their "PolySubstance" status during the Last 3 months! -->
+<!-- ##After, I'll pick the "worse score / status" -->
+
+<!--   cohortF_Drugs <- cohortF_Drugs %>% rowwise %>% -->
+<!--   mutate(PolyScore = sum(c(ast_pot2_Bn,  -->
+<!--                              ast_coc2_Bn,  -->
+<!--                              ast_pst2_Bn, -->
+<!--                              ast_amph2_Bn, -->
+<!--                              ast_inh2_Bn,  -->
+<!--                              ast_sed2_Bn, -->
+<!--                              ast_hal2_Bn,  -->
+<!--                              ast_opi2_Bn, -->
+<!--                              ast_opip2_Bn), na.rm=T) -->
+<!--          ) -->
+
+
+<!-- table(cohortF_Drugs$PolyScore, useNA = "ifany") -->
+
+<!-- ``` -->
+
+
+<!-- ```{r PolySubstance_Jenni} -->
+<!-- # #As suggested by Jenni --> 28dec2022 "...Here "poly" is two or more drugs and "poly3" is three or more drugs, these are both used in the literature. For our purposes we should probably go with two or more drugs in the past three months as this is more meaningful than ever/lifetime..." -->
+<!-- #  -->
+<!-- # cohortF_Drugs <- transform( -->
+<!-- #   cohortF_Drugs, Poly2 = ifelse(PolyScore >=2, "Polysubstance 2Drugs last 3 mths (>= 2 drugs)",  -->
+<!-- #                              ifelse(PolyScore ==1, "No polysubstance last 3 mths (just One drug)", -->
+<!-- #                                     ifelse(PolyScore == 0 ,"No drug use last 3 mths", ""))) -->
+<!-- #                                     ) -->
+<!-- #  -->
+<!-- #  -->
+<!-- # table(cohortF_Drugs$Poly2, cohortF_Drugs$PolyScore, useNA="ifany") -->
+<!-- #  -->
+<!-- # cohortF_Drugs <- cohortF_Drugs %>% -->
+<!-- #             mutate(Poly3 = case_when( -->
+<!-- #               PolyScore >=3 ~ "Polysubstance 3Drugs last 3 mths (>= 3 drugs)", -->
+<!-- #             PolyScore ==1 | PolyScore ==2 ~ "No polysubstance last 3 mths (One or Two drugs)", -->
+<!-- #             PolyScore == 0 ~ "No drug use last 3 mths", -->
+<!-- #               PolyScore == "NA" ~ "Missing") -->
+<!-- #    ) -->
+<!-- #  -->
+<!-- #  -->
+<!-- #  -->
+<!-- #  -->
+<!-- # cohortF_Drugs <- apply_labels(cohortF_Drugs, -->
+<!-- #                       Poly3 = "Polysubstance, >=3 Drugs", -->
+<!-- #                       Poly2 = "Polysubstance, >=2 Drugs") -->
+<!-- #  -->
+<!-- #  -->
+<!-- #  -->
+<!-- # table(cohortF_Drugs$Poly3, cohortF_Drugs$Poly2, useNA="ifany") -->
+
+<!-- ``` -->
+
+<!-- 2) Any substance use disorder including those with severe or moderate SSI scores -->
+<!-- ```{r Picking the SEVERE AND MODERATE score SSI for each drug, echo=F, include=F} -->
+<!-- # #meetJenni #2 -->
+<!-- # #keep all the entries corresponding to max values of AuditScore_Raw within each group: -->
+<!-- # #For SSIScore_Raw -->
+<!-- #  -->
+<!-- # ##MARIJUANA -->
+<!-- # setDT(cohortF_Drugs) -->
+<!-- # Worse_SevMod_SSI_MARI <- cohortF_Drugs[cohortF_Drugs[, .I[AssistScore_meth == max(AssistScore_meth)], by=StudyId]$V1] -->
+<!-- # #Alternative: group %>% group_by(Subject) %>% top_n(1, pt) -->
+<!-- # length(unique(Worse_SevMod_SSI_MARI$StudyId)) -->
+<!-- # ##Each patient has its own "worse scroe for each drug" -->
+<!-- # #Selecting just the "earlier visit" for demographic data -->
+<!-- # Worse_SevMod_SSI_MARI <- Worse_SevMod_SSI_MARI[Worse_SevMod_SSI_MARI[, .I[Visit_SurveyDRUGS_Order == min(Visit_SurveyDRUGS_Order)], by=StudyId]$V1] -->
+<!-- # summary(Worse_SevMod_SSI_MARI$AssistScore_meth) -->
+<!-- #  -->
+<!-- # Worse_SevMod_SSI_MARI$MARI_Severe <- ifelse(Worse_SevMod_SSI_MARI$AssistScore_meth >= 4, 1, 0) -->
+<!-- # #table(Worse_SevMod_SSI_MARI$MARI_Severe, useNA="ifany") -->
+<!-- #  -->
+<!-- # ##COCAINE -->
+<!-- # Worse_SevMod_SSI_coca <- cohortF_Drugs[cohortF_Drugs[, .I[AssistScore_COCA == max(AssistScore_COCA)], by=StudyId]$V1] -->
+<!-- # #Alternative: group %>% group_by(Subject) %>% top_n(1, pt) -->
+<!-- # length(unique(Worse_SevMod_SSI_coca$StudyId)) -->
+<!-- # ##Each patient has its own "worse scroe for each drug" -->
+<!-- # #Selecting just the "earlier visit" for demographic data -->
+<!-- # Worse_SevMod_SSI_coca <- Worse_SevMod_SSI_coca[Worse_SevMod_SSI_coca[, .I[Visit_SurveyDRUGS_Order == min(Visit_SurveyDRUGS_Order)], by=StudyId]$V1] -->
+<!-- #  -->
+<!-- # Worse_SevMod_SSI_coca$COCA_Severe <- ifelse(Worse_SevMod_SSI_coca$AssistScore_COCA >= 4, 1, 0) -->
+<!-- # #table(Worse_SevMod_SSI_coca$COCA_Severe, useNA="ifany") -->
+<!-- #  -->
+<!-- #  -->
+<!-- # ##PxSTIM -->
+<!-- # Worse_SevMod_SSI_PxStim <- cohortF_Drugs[cohortF_Drugs[, .I[AssistScore_PxSTIM == max(AssistScore_PxSTIM)], by=StudyId]$V1] -->
+<!-- # #Alternative: group %>% group_by(Subject) %>% top_n(1, pt) -->
+<!-- # length(unique(Worse_SevMod_SSI_PxStim$StudyId)) -->
+<!-- # ##Each patient has its own "worse scroe for each drug" -->
+<!-- # #Selecting just the "earlier visit" for demographic data -->
+<!-- # Worse_SevMod_SSI_PxStim <- Worse_SevMod_SSI_PxStim[Worse_SevMod_SSI_PxStim[, .I[Visit_SurveyDRUGS_Order == min(Visit_SurveyDRUGS_Order)], by=StudyId]$V1] -->
+<!-- #  -->
+<!-- # Worse_SevMod_SSI_PxStim$PxStim_Severe <- ifelse(Worse_SevMod_SSI_PxStim$AssistScore_PxSTIM >= 4, 1, 0) -->
+<!-- # #table(Worse_SevMod_SSI_PxStim$PxStim_Severe, useNA="ifany") -->
+<!-- #  -->
+<!-- #  -->
+<!-- # ##AMPH -->
+<!-- # Worse_SevMod_SSI_Amph <- cohortF_Drugs[cohortF_Drugs[, .I[AssistScore_AMPH == max(AssistScore_AMPH)], by=StudyId]$V1] -->
+<!-- # #Alternative: group %>% group_by(Subject) %>% top_n(1, pt) -->
+<!-- # length(unique(Worse_SevMod_SSI_Amph$StudyId)) -->
+<!-- # ##Each patient has its own "worse scroe for each drug" -->
+<!-- # #Selecting just the "earlier visit" for demographic data -->
+<!-- # Worse_SevMod_SSI_Amph <- Worse_SevMod_SSI_Amph[Worse_SevMod_SSI_Amph[, .I[Visit_SurveyDRUGS_Order == min(Visit_SurveyDRUGS_Order)], by=StudyId]$V1] -->
+<!-- #  -->
+<!-- # Worse_SevMod_SSI_Amph$AMPH_Severe <- ifelse(Worse_SevMod_SSI_Amph$AssistScore_AMPH >= 4, 1, 0) -->
+<!-- # #table(Worse_SevMod_SSI_Amph$AMPH_Severe, useNA="ifany") -->
+<!-- #  -->
+<!-- #  -->
+<!-- #  -->
+<!-- # ##INH -->
+<!-- # Worse_SevMod_SSI_INH <- cohortF_Drugs[cohortF_Drugs[, .I[AssistScore_INH == max(AssistScore_INH)], by=StudyId]$V1] -->
+<!-- # #Alternative: group %>% group_by(Subject) %>% top_n(1, pt) -->
+<!-- # length(unique(Worse_SevMod_SSI_INH$StudyId)) -->
+<!-- # ##Each patient has its own "worse scroe for each drug" -->
+<!-- # #Selecting just the "earlier visit" for demographic data -->
+<!-- # Worse_SevMod_SSI_INH <- Worse_SevMod_SSI_INH[Worse_SevMod_SSI_INH[, .I[Visit_SurveyDRUGS_Order == min(Visit_SurveyDRUGS_Order)], by=StudyId]$V1] -->
+<!-- #  -->
+<!-- # Worse_SevMod_SSI_INH$INH_Severe <- ifelse(Worse_SevMod_SSI_INH$AssistScore_INH >= 4, 1, 0) -->
+<!-- # #table(Worse_SevMod_SSI_INH$INH_Severe, useNA="ifany") -->
+<!-- #  -->
+<!-- #  -->
+<!-- #  -->
+<!-- # ##SED -->
+<!-- # Worse_SevMod_SSI_SED <- cohortF_Drugs[cohortF_Drugs[, .I[AssistScore_SED == max(AssistScore_SED)], by=StudyId]$V1] -->
+<!-- # #Alternative: group %>% group_by(Subject) %>% top_n(1, pt) -->
+<!-- # length(unique(Worse_SevMod_SSI_SED$StudyId)) -->
+<!-- # ##Each patient has its own "worse scroe for each drug" -->
+<!-- # #Selecting just the "earlier visit" for demographic data -->
+<!-- # Worse_SevMod_SSI_SED <- Worse_SevMod_SSI_SED[Worse_SevMod_SSI_SED[, .I[Visit_SurveyDRUGS_Order == min(Visit_SurveyDRUGS_Order)], by=StudyId]$V1] -->
+<!-- #  -->
+<!-- # Worse_SevMod_SSI_SED$SED_Severe <- ifelse(Worse_SevMod_SSI_SED$AssistScore_SED >= 4, 1, 0) -->
+<!-- # #table(Worse_SevMod_SSI_SED$SED_Severe, useNA="ifany") -->
+<!-- #  -->
+<!-- #  -->
+<!-- # ##HAL -->
+<!-- # Worse_SevMod_SSI_HAL <- cohortF_Drugs[cohortF_Drugs[, .I[AssistScore_HAL == max(AssistScore_HAL)], by=StudyId]$V1] -->
+<!-- # #Alternative: group %>% group_by(Subject) %>% top_n(1, pt) -->
+<!-- # length(unique(Worse_SevMod_SSI_HAL$StudyId)) -->
+<!-- # ##Each patient has its own "worse scroe for each drug" -->
+<!-- # #Selecting just the "earlier visit" for demographic data -->
+<!-- # Worse_SevMod_SSI_HAL <- Worse_SevMod_SSI_HAL[Worse_SevMod_SSI_HAL[, .I[Visit_SurveyDRUGS_Order == min(Visit_SurveyDRUGS_Order)], by=StudyId]$V1] -->
+<!-- #  -->
+<!-- # Worse_SevMod_SSI_HAL$HAL_Severe <- ifelse(Worse_SevMod_SSI_HAL$AssistScore_HAL >= 4, 1, 0) -->
+<!-- # #table(Worse_SevMod_SSI_HAL$HAL_Severe, useNA="ifany") -->
+<!-- #  -->
+<!-- #  -->
+<!-- # ##OPIPx -->
+<!-- # Worse_SevMod_SSI_OpiPx <- cohortF_Drugs[cohortF_Drugs[, .I[AssistScore_OpiPx == max(AssistScore_OpiPx)], by=StudyId]$V1] -->
+<!-- # #Alternative: group %>% group_by(Subject) %>% top_n(1, pt) -->
+<!-- # length(unique(Worse_SevMod_SSI_OpiPx$StudyId)) -->
+<!-- # ##Each patient has its own "worse scroe for each drug" -->
+<!-- # #Selecting just the "earlier visit" for demographic data -->
+<!-- # Worse_SevMod_SSI_OpiPx <- Worse_SevMod_SSI_OpiPx[Worse_SevMod_SSI_OpiPx[, .I[Visit_SurveyDRUGS_Order == min(Visit_SurveyDRUGS_Order)], by=StudyId]$V1] -->
+<!-- #  -->
+<!-- # Worse_SevMod_SSI_OpiPx$OpiPx_Severe <- ifelse(Worse_SevMod_SSI_OpiPx$AssistScore_OpiPx >= 4, 1, 0) -->
+<!-- # #table(Worse_SevMod_SSI_OpiPx$OpiPx_Severe, useNA="ifany") -->
+<!-- #  -->
+<!-- #  -->
+<!-- # ##OpiSt -->
+<!-- # Worse_SevMod_SSI_OpiSt <- cohortF_Drugs[cohortF_Drugs[, .I[AssistScore_OpiSt == max(AssistScore_OpiSt)], by=StudyId]$V1] -->
+<!-- # #Alternative: group %>% group_by(Subject) %>% top_n(1, pt) -->
+<!-- # length(unique(Worse_SevMod_SSI_OpiSt$StudyId)) -->
+<!-- # ##Each patient has its own "worse scroe for each drug" -->
+<!-- # #Selecting just the "earlier visit" for demographic data -->
+<!-- # Worse_SevMod_SSI_OpiSt <- Worse_SevMod_SSI_OpiSt[Worse_SevMod_SSI_OpiSt[, .I[Visit_SurveyDRUGS_Order == min(Visit_SurveyDRUGS_Order)], by=StudyId]$V1] -->
+<!-- #  -->
+<!-- #  -->
+<!-- # Worse_SevMod_SSI_OpiSt$OpiSt_Severe <- ifelse(Worse_SevMod_SSI_OpiSt$AssistScore_OpiSt >= 4, 1, 0) -->
+<!-- # #table(Worse_SevMod_SSI_OpiSt$OpiSt_Severe, useNA="ifany") -->
+<!-- ``` -->
+
+
+<!-- <!-- #SEVERE | MODERATE --> -->
+<!-- <!-- ```{r} --> -->
+<!-- <!-- #Any substance use disorder variable SEVERE | MODERATE --> -->
+<!-- <!-- ##Must merge the columns 8345 (each column will correspond to each substance "worse" score) --> -->
+<!-- <!-- ###SELECTING THE COLUMNs --> -->
+<!-- <!-- library(tidyverse) --> -->
+
+<!-- <!--  Worse_SevMod_SSI_MARI <- Worse_SevMod_SSI_MARI %>% --> -->
+<!-- <!--    select(StudyId, MARI_Severe) --> -->
+
+<!-- <!--  Worse_SevMod_SSI_coca <- Worse_SevMod_SSI_coca %>% --> -->
+<!-- <!--    select(StudyId, COCA_Severe) --> -->
+
+<!-- <!--  Worse_SevMod_SSI_PxStim <- Worse_SevMod_SSI_PxStim %>% --> -->
+<!-- <!--    select(StudyId, PxStim_Severe) --> -->
+
+<!-- <!--  Worse_SevMod_SSI_Amph <- Worse_SevMod_SSI_Amph %>% --> -->
+<!-- <!--    select(StudyId, AMPH_Severe) --> -->
+
+<!-- <!--  Worse_SevMod_SSI_INH <- Worse_SevMod_SSI_INH %>% --> -->
+<!-- <!--    select(StudyId, INH_Severe) --> -->
+
+<!-- <!--  Worse_SevMod_SSI_SED <- Worse_SevMod_SSI_SED %>% --> -->
+<!-- <!--    select(StudyId, SED_Severe) --> -->
+
+<!-- <!--  Worse_SevMod_SSI_HAL <- Worse_SevMod_SSI_HAL %>% --> -->
+<!-- <!--    select(StudyId, HAL_Severe) --> -->
+
+<!-- <!--  Worse_SevMod_SSI_OpiPx <- Worse_SevMod_SSI_OpiPx %>% --> -->
+<!-- <!--    select(StudyId, OpiPx_Severe) --> -->
+
+<!-- <!--  Worse_SevMod_SSI_OpiSt <- Worse_SevMod_SSI_OpiSt %>% --> -->
+<!-- <!--    select(StudyId, OpiSt_Severe) --> -->
+<!-- <!-- ``` --> -->
+
+<!-- <!-- #MERGING --> -->
+<!-- <!-- ```{r Merging them, echo=F, include=F}  --> -->
+<!-- <!-- MARI_COCA <- merge(Worse_SevMod_SSI_MARI, Worse_SevMod_SSI_coca, by = "StudyId", all=T) --> -->
+<!-- <!-- MARI_COCA_PxSTIM <- merge(MARI_COCA, Worse_SevMod_SSI_PxStim, by = "StudyId", all=T) --> -->
+<!-- <!-- MARI_COCA_PxSTIM_AMPH <- merge(MARI_COCA_PxSTIM, Worse_SevMod_SSI_Amph, by = "StudyId", all=T) --> -->
+<!-- <!-- MARI_COCA_PxSTIM_AMPH_INH <- merge(MARI_COCA_PxSTIM_AMPH, Worse_SevMod_SSI_INH, by = "StudyId", all=T) --> -->
+<!-- <!-- MARI_COCA_PxSTIM_AMPH_INH_SED <- merge(MARI_COCA_PxSTIM_AMPH_INH, Worse_SevMod_SSI_SED, by = "StudyId", all=T) --> -->
+<!-- <!-- MARI_COCA_PxSTIM_AMPH_INH_SED_HAL <- merge(MARI_COCA_PxSTIM_AMPH_INH_SED, Worse_SevMod_SSI_HAL, by = "StudyId", all=T) --> -->
+<!-- <!-- MARI_COCA_PxSTIM_AMPH_INH_SED_HAL_OpiPx <- merge(MARI_COCA_PxSTIM_AMPH_INH_SED_HAL, Worse_SevMod_SSI_OpiPx, by = "StudyId", all=T) --> -->
+<!-- <!-- MARI_COCA_PxSTIM_AMPH_INH_SED_HAL_OpiPx_OpiSt <- merge(MARI_COCA_PxSTIM_AMPH_INH_SED_HAL_OpiPx, Worse_SevMod_SSI_OpiSt, by = "StudyId", all=T) --> -->
+
+<!-- <!-- SSI_SevereModerate <- MARI_COCA_PxSTIM_AMPH_INH_SED_HAL_OpiPx_OpiSt --> -->
+<!-- <!-- SSI_SevereModerate --> -->
+<!-- <!-- ``` --> -->
+
+<!-- <!-- ```{r ANY SEVERE, echo=F, include=F} --> -->
+<!-- <!-- SSI_SevereModerate <- SSI_SevereModerate %>% rowwise %>% --> -->
+<!-- <!--   mutate(AnySevereModeratePOINTS = sum(c(MARI_Severe, --> -->
+<!-- <!--                                  COCA_Severe, --> -->
+<!-- <!--                                  PxStim_Severe, --> -->
+<!-- <!--                                     AMPH_Severe, --> -->
+<!-- <!--                                     INH_Severe, --> -->
+<!-- <!--                                     SED_Severe, --> -->
+<!-- <!--                                  HAL_Severe, --> -->
+<!-- <!--                                  OpiPx_Severe, --> -->
+<!-- <!--                                  OpiSt_Severe), na.rm=T) --> -->
+<!-- <!--                                ) --> -->
+
+<!-- <!-- var_label(SSI_SevereModerate) <-  --> -->
+<!-- <!--         list(AnySevereModeratePOINTS = "Severe OR Moderate SSI" --> -->
+<!-- <!--          ) --> -->
+
+
+<!-- <!-- SSI_SevereModerate$AnySevereModerate <- ifelse(SSI_SevereModerate$AnySevereModeratePOINTS >= 1, "Severe | Moderate SSI", "NON-Severe|Moderate") --> -->
+<!-- <!-- #table(SSI_SevereModerate$AnySevereModerate, useNA="ifany") --> -->
+<!-- <!-- SSI_SevereModerate --> -->
+<!-- <!-- ``` --> -->
+
+<!-- <!-- #MEERGING ANY variables --> -->
+<!-- <!-- ```{r Merging ANY variables, echo=F, include=F} --> -->
+<!-- <!-- SSI_SevereModerate <- SSI_SevereModerate %>% --> -->
+<!-- <!--    select(StudyId, AnySevereModerate) --> -->
+
+<!-- <!-- SSI_Severe <- SSI_Severe %>% --> -->
+<!-- <!--    select(StudyId, AnySevere) --> -->
+
+<!-- <!-- SSI_Sev_SevMod <- merge(SSI_Severe, SSI_SevereModerate, by = "StudyId", all=T) --> -->
+<!-- <!-- #SSI_Sev_SevMod --> -->
+
+<!-- ```{r MERGE cohort WITH SSI_SevMod, echo=F, include=F} -->
+<!-- #cohortF_Drugs_A <- cohortF_Drugs[cohortF_Drugs[, .I[Visit_SurveyDRUGS_Order == min(Visit_SurveyDRUGS_Order)], by=StudyId]$V1] -->
+
+<!-- cohortF_Drugs_ANY <- merge(cohortF_Drugs, SSI_SevMod, by ="StudyId", all=T) -->
+
+<!-- length(unique(cohortF_Drugs$StudyId)) -->
+
+<!-- length(unique(cohortF_Drugs_ANY$StudyId)) -->
+<!-- ``` -->
+
+<!-- <!-- #Visit Order --> -->
+<!-- <!-- cohortF_Drugs_ANY <- cohortF_Drugs_ANY %>%  --> -->
+<!-- <!--     group_by(StudyId) %>%  --> -->
+<!-- <!--     dplyr::arrange(StudyId, as.Date(SurveyDate)) %>%  --> -->
+<!-- <!--     mutate(Visit_SurveyDRUGS_Order = row_number()) --> -->
+
+<!-- <!-- setDT(cohortF_Drugs_ANY) --> -->
+<!-- <!-- cohortF_Drugs_ANY <- cohortF_Drugs_ANY[cohortF_Drugs_ANY[, .I[Visit_SurveyDRUGS_Order == min(Visit_SurveyDRUGS_Order)], by=StudyId]$V1] --> -->
+
+<!-- <!-- length(cohortF_Drugs_ANY$StudyId) --> -->
+<!-- <!-- AlphaColumns(cohortF_Drugs_ANY) --> -->
+<!-- <!-- ``` --> -->
+
+
+
+
+
+
+
+<!-- ```{r} -->
+<!-- table(SSI_SevMod$AnySevere, useNA="ifany") -->
+<!-- table(SSI_SevMod$AnySevMod, useNA="ifany") -->
+
+<!-- ``` -->
+
+
+
+<!-- #Glimpse -->
+<!-- ```{r} -->
+<!-- setDT(cohortF_Drugs_ANY) -->
+<!-- AlphaColumns(cohortF_Drugs_ANY) -->
+
+<!-- Tab <- cohortF_Drugs_ANY %>% -->
+<!--   select( c("StudyId","Age", "AgeCat", "BirthSex",  "Race", "AnySevere", "AnySevMod","Poly2", "Poly3")) -->
+
+<!-- TabSevMod <- Tab %>% -->
+<!--   tbl_summary(by=AnySevMod, missing="no") %>% -->
+<!--              add_p(pvalue_fun = ~style_pvalue(.x, digits = 2)) %>% -->
+<!--   add_overall() %>% -->
+<!--   add_n() %>%  -->
+<!--   # remove studyId row -->
+<!--   modify_table_body(filter, !(variable == "StudyId"))  %>% -->
+<!--   remove_row_type(BirthSex, type = "level", c("Male", "Intersexed")) %>% -->
+<!--    remove_row_type(Race, type = "level", c("")) %>% -->
+<!--   modify_header(label ~ "**Variable**") %>% -->
+<!--   modify_spanning_header(c("stat_1", "stat_2") ~ "**Severe (c/o 27) SSI Score Moderate(c/o 4)**") %>% -->
+<!--   modify_footnote( -->
+<!--     all_stat_cols() ~ "Median (IQR) or Frequency (%)" -->
+<!--   ) %>% -->
+<!--   modify_caption("**Table X  Characteristics of a Cohort of People Living with HIV Enrolled in the CFAR Network of Integrated Clinical Systems (CNICS) between 2018 and 2022 (N=XXXX)	by Worse SSI score (Severe) for ANY respective substance**") %>% -->
+<!--   bold_labels() %>%  -->
+<!-- gtsummary::as_gt() %>%             # convert to gt table -->
+<!-- gt::tab_source_note(gt::md("*Jennis's study / CNICS 20jan2023*"))  -->
+
+<!--  TabSevMod %>% gt::gtsave(             # save table as image -->
+<!--     filename = "~/Library/CloudStorage/Box-Box/UCSF_86/Jain_1986/Reports/Tables_Figs/SevereMod_SSI.html", inline_css = TRUE) -->
+
+<!-- TabSevMod -->
+
+
+<!-- TabSev <- Tab %>% -->
+<!--   tbl_summary(by=AnySevere, missing="no") %>% -->
+<!--              add_p(pvalue_fun = ~style_pvalue(.x, digits = 2)) %>% -->
+<!--   add_overall() %>% -->
+<!--   add_n() %>%  -->
+<!--   # remove studyId row -->
+<!--   modify_table_body(filter, !(variable == "StudyId"))  %>% -->
+<!--   remove_row_type(BirthSex, type = "level", c("Male", "Intersexed")) %>% -->
+<!--    remove_row_type(Race, type = "level", c("")) %>% -->
+<!--   modify_header(label ~ "**Variable**") %>% -->
+<!--   modify_spanning_header(c("stat_1", "stat_2") ~ "**Severe SSI Score c/o=27**") %>% -->
+<!--   modify_footnote( -->
+<!--     all_stat_cols() ~ "Median (IQR) or Frequency (%)" -->
+<!--   ) %>% -->
+<!--   modify_caption("**Table X  Characteristics of a Cohort of People Living with HIV Enrolled in the CFAR Network of Integrated Clinical Systems (CNICS) between 2018 and 2022 (N=XXXX)	by Worse SSI score (Severe) for ANY respective substance**") %>% -->
+<!--   bold_labels() %>%  -->
+<!-- gtsummary::as_gt() %>%             # convert to gt table -->
+<!-- gt::tab_source_note(gt::md("*Jennis's study / CNICS 25jan2023*"))  -->
+
+
+<!--  TabSev %>% gt::gtsave(             # save table as image -->
+<!--     filename = "~/Library/CloudStorage/Box-Box/UCSF_86/Jain_1986/Reports/Tables_Figs/Severe_SSI.html", inline_css = TRUE) -->
+
+<!-- TabSevMod -->
+
+<!-- ############ -->
+<!-- #TabMari <- cohortF_Drugs_ANY %>% -->
+<!--  # select( c("StudyId","Age", "AgeCat", "BirthSex",  "Race", "AnySevereModerate", "AnySevere")) -->
+
+<!-- # TabMari <- TabSevMod %>% -->
+<!-- #   tbl_summary(by=AnySevMod, missing="no") %>% -->
+<!-- #              add_p(pvalue_fun = ~style_pvalue(.x, digits = 2)) %>% -->
+<!-- #   add_overall() %>% -->
+<!-- #   add_n() %>%  -->
+<!-- #   # remove studyId row -->
+<!-- #   modify_table_body(filter, !(variable == "StudyId"))  %>% -->
+<!-- #   remove_row_type(BirthSex, type = "level", c("Male", "Intersexed")) %>% -->
+<!-- #    remove_row_type(Race, type = "level", c("")) %>% -->
+<!-- #   modify_header(label ~ "**Variable**") %>% -->
+<!-- #   modify_spanning_header(c("stat_1", "stat_2") ~ "**Severe / Moderate SSI Score c/o=27 & 4**") %>% -->
+<!-- #   modify_footnote( -->
+<!-- #     all_stat_cols() ~ "Median (IQR) or Frequency (%)" -->
+<!-- #   ) %>% -->
+<!-- #   modify_caption("**Table X  Characteristics of a Cohort of People Living with HIV Enrolled in the CFAR Network of Integrated Clinical Systems (CNICS) between 2018 and 2022 (N=XXXX)	by Worse SSI score (Severe OR Moderate) for ANY respective substance**") %>% -->
+<!-- #   bold_labels() %>%  -->
+<!-- # gtsummary::as_gt() %>%             # convert to gt table -->
+<!-- # gt::tab_source_note(gt::md("*Jennis's study / CNICS 25jan2023*"))  -->
+<!-- #  -->
+<!-- #  TabMari %>% gt::gtsave(             # save table as image -->
+<!-- #     filename = "~/Library/CloudStorage/Box-Box/UCSF_86/Jain_1986/Reports/Tables_Figs/SevereMod_SSI.html", inline_css = TRUE) -->
+<!-- #  -->
+<!-- # TabMari -->
+<!-- ``` -->
+
+
+<!-- 3) Any substance use disorder including those with severe or moderate SSI scores or hazardous alcohol consumption including women with a score of 3 or more and men with a score of 4 or more. -->
+
+<!-- #HERE10Jan2023 -->
+<!-- ```{r Picking the SEVERE AND MODERATE score SSI for each drug, echo=F, include=F} -->
+<!-- #meetJenni #2 -->
+<!-- #keep all the entries corresponding to max values of AuditScore_Raw within each group: -->
+<!-- #For SSIScore_Raw -->
+
+<!-- # ##MARIJUANA -->
+<!-- # setDT(cohortF_Drugs) -->
+<!-- # Worse_SevMod_SSI_MARI <- cohortF_Drugs[cohortF_Drugs[, .I[AssistScore_meth == max(AssistScore_meth)], by=StudyId]$V1] -->
+<!-- # #Alternative: group %>% group_by(Subject) %>% top_n(1, pt) -->
+<!-- # length(unique(Worse_SevMod_SSI_MARI$StudyId)) -->
+<!-- # ##Each patient has its own "worse scroe for each drug" -->
+<!-- # #Selecting just the "earlier visit" for demographic data -->
+<!-- # Worse_SevMod_SSI_MARI <- Worse_SevMod_SSI_MARI[Worse_SevMod_SSI_MARI[, .I[Visit_SurveyDRUGS_Order == min(Visit_SurveyDRUGS_Order)], by=StudyId]$V1] -->
+<!-- # summary(Worse_SevMod_SSI_MARI$AssistScore_meth) -->
+<!-- #  -->
+<!-- # Worse_SevMod_SSI_MARI$MARI_Severe <- ifelse(Worse_SevMod_SSI_MARI$AssistScore_meth >= 4, 1, 0) -->
+<!-- # table(Worse_SevMod_SSI_MARI$MARI_Severe, useNA="ifany") -->
+<!-- #  -->
+<!-- # ##COCAINE -->
+<!-- # Worse_SevMod_SSI_coca <- cohortF_Drugs[cohortF_Drugs[, .I[AssistScore_COCA == max(AssistScore_COCA)], by=StudyId]$V1] -->
+<!-- # #Alternative: group %>% group_by(Subject) %>% top_n(1, pt) -->
+<!-- # length(unique(Worse_SevMod_SSI_coca$StudyId)) -->
+<!-- # ##Each patient has its own "worse scroe for each drug" -->
+<!-- # #Selecting just the "earlier visit" for demographic data -->
+<!-- # Worse_SevMod_SSI_coca <- Worse_SevMod_SSI_coca[Worse_SevMod_SSI_coca[, .I[Visit_SurveyDRUGS_Order == min(Visit_SurveyDRUGS_Order)], by=StudyId]$V1] -->
+<!-- #  -->
+<!-- # Worse_SevMod_SSI_coca$COCA_Severe <- ifelse(Worse_SevMod_SSI_coca$AssistScore_COCA >= 4, 1, 0) -->
+<!-- # table(Worse_SevMod_SSI_coca$COCA_Severe, useNA="ifany") -->
+<!-- #  -->
+<!-- #  -->
+<!-- # ##PxSTIM -->
+<!-- # Worse_SevMod_SSI_PxStim <- cohortF_Drugs[cohortF_Drugs[, .I[AssistScore_PxSTIM == max(AssistScore_PxSTIM)], by=StudyId]$V1] -->
+<!-- # #Alternative: group %>% group_by(Subject) %>% top_n(1, pt) -->
+<!-- # length(unique(Worse_SevMod_SSI_PxStim$StudyId)) -->
+<!-- # ##Each patient has its own "worse scroe for each drug" -->
+<!-- # #Selecting just the "earlier visit" for demographic data -->
+<!-- # Worse_SevMod_SSI_PxStim <- Worse_SevMod_SSI_PxStim[Worse_SevMod_SSI_PxStim[, .I[Visit_SurveyDRUGS_Order == min(Visit_SurveyDRUGS_Order)], by=StudyId]$V1] -->
+<!-- #  -->
+<!-- # Worse_SevMod_SSI_PxStim$PxStim_Severe <- ifelse(Worse_SevMod_SSI_PxStim$AssistScore_PxSTIM >= 4, 1, 0) -->
+<!-- # table(Worse_SevMod_SSI_PxStim$PxStim_Severe, useNA="ifany") -->
+<!-- #  -->
+<!-- #  -->
+<!-- # ##AMPH -->
+<!-- # Worse_SevMod_SSI_Amph <- cohortF_Drugs[cohortF_Drugs[, .I[AssistScore_AMPH == max(AssistScore_AMPH)], by=StudyId]$V1] -->
+<!-- # #Alternative: group %>% group_by(Subject) %>% top_n(1, pt) -->
+<!-- # length(unique(Worse_SevMod_SSI_Amph$StudyId)) -->
+<!-- # ##Each patient has its own "worse scroe for each drug" -->
+<!-- # #Selecting just the "earlier visit" for demographic data -->
+<!-- # Worse_SevMod_SSI_Amph <- Worse_SevMod_SSI_Amph[Worse_SevMod_SSI_Amph[, .I[Visit_SurveyDRUGS_Order == min(Visit_SurveyDRUGS_Order)], by=StudyId]$V1] -->
+<!-- #  -->
+<!-- # Worse_SevMod_SSI_Amph$AMPH_Severe <- ifelse(Worse_SevMod_SSI_Amph$AssistScore_AMPH >= 4, 1, 0) -->
+<!-- # table(Worse_SevMod_SSI_Amph$AMPH_Severe, useNA="ifany") -->
+<!-- #  -->
+<!-- #  -->
+<!-- #  -->
+<!-- # ##INH -->
+<!-- # Worse_SevMod_SSI_INH <- cohortF_Drugs[cohortF_Drugs[, .I[AssistScore_INH == max(AssistScore_INH)], by=StudyId]$V1] -->
+<!-- # #Alternative: group %>% group_by(Subject) %>% top_n(1, pt) -->
+<!-- # length(unique(Worse_SevMod_SSI_INH$StudyId)) -->
+<!-- # ##Each patient has its own "worse scroe for each drug" -->
+<!-- # #Selecting just the "earlier visit" for demographic data -->
+<!-- # Worse_SevMod_SSI_INH <- Worse_SevMod_SSI_INH[Worse_SevMod_SSI_INH[, .I[Visit_SurveyDRUGS_Order == min(Visit_SurveyDRUGS_Order)], by=StudyId]$V1] -->
+<!-- #  -->
+<!-- # Worse_SevMod_SSI_INH$INH_Severe <- ifelse(Worse_SevMod_SSI_INH$AssistScore_INH >= 4, 1, 0) -->
+<!-- # table(Worse_SevMod_SSI_INH$INH_Severe, useNA="ifany") -->
+<!-- #  -->
+<!-- #  -->
+<!-- #  -->
+<!-- # ##SED -->
+<!-- # Worse_SevMod_SSI_SED <- cohortF_Drugs[cohortF_Drugs[, .I[AssistScore_SED == max(AssistScore_SED)], by=StudyId]$V1] -->
+<!-- # #Alternative: group %>% group_by(Subject) %>% top_n(1, pt) -->
+<!-- # length(unique(Worse_SevMod_SSI_SED$StudyId)) -->
+<!-- # ##Each patient has its own "worse scroe for each drug" -->
+<!-- # #Selecting just the "earlier visit" for demographic data -->
+<!-- # Worse_SevMod_SSI_SED <- Worse_SevMod_SSI_SED[Worse_SevMod_SSI_SED[, .I[Visit_SurveyDRUGS_Order == min(Visit_SurveyDRUGS_Order)], by=StudyId]$V1] -->
+<!-- #  -->
+<!-- # Worse_SevMod_SSI_SED$SED_Severe <- ifelse(Worse_SevMod_SSI_SED$AssistScore_SED >= 4, 1, 0) -->
+<!-- # table(Worse_SevMod_SSI_SED$SED_Severe, useNA="ifany") -->
+<!-- #  -->
+<!-- #  -->
+<!-- # ##HAL -->
+<!-- # Worse_SevMod_SSI_HAL <- cohortF_Drugs[cohortF_Drugs[, .I[AssistScore_HAL == max(AssistScore_HAL)], by=StudyId]$V1] -->
+<!-- # #Alternative: group %>% group_by(Subject) %>% top_n(1, pt) -->
+<!-- # length(unique(Worse_SevMod_SSI_HAL$StudyId)) -->
+<!-- # ##Each patient has its own "worse scroe for each drug" -->
+<!-- # #Selecting just the "earlier visit" for demographic data -->
+<!-- # Worse_SevMod_SSI_HAL <- Worse_SevMod_SSI_HAL[Worse_SevMod_SSI_HAL[, .I[Visit_SurveyDRUGS_Order == min(Visit_SurveyDRUGS_Order)], by=StudyId]$V1] -->
+<!-- #  -->
+<!-- # Worse_SevMod_SSI_HAL$HAL_Severe <- ifelse(Worse_SevMod_SSI_HAL$AssistScore_HAL >= 4, 1, 0) -->
+<!-- # table(Worse_SevMod_SSI_HAL$HAL_Severe, useNA="ifany") -->
+<!-- #  -->
+<!-- #  -->
+<!-- # ##OPIPx -->
+<!-- # Worse_SevMod_SSI_OpiPx <- cohortF_Drugs[cohortF_Drugs[, .I[AssistScore_OpiPx == max(AssistScore_OpiPx)], by=StudyId]$V1] -->
+<!-- # #Alternative: group %>% group_by(Subject) %>% top_n(1, pt) -->
+<!-- # length(unique(Worse_SevMod_SSI_OpiPx$StudyId)) -->
+<!-- # ##Each patient has its own "worse scroe for each drug" -->
+<!-- # #Selecting just the "earlier visit" for demographic data -->
+<!-- # Worse_SevMod_SSI_OpiPx <- Worse_SevMod_SSI_OpiPx[Worse_SevMod_SSI_OpiPx[, .I[Visit_SurveyDRUGS_Order == min(Visit_SurveyDRUGS_Order)], by=StudyId]$V1] -->
+<!-- #  -->
+<!-- # Worse_SevMod_SSI_OpiPx$OpiPx_Severe <- ifelse(Worse_SevMod_SSI_OpiPx$AssistScore_OpiPx >= 4, 1, 0) -->
+<!-- # table(Worse_SevMod_SSI_OpiPx$OpiPx_Severe, useNA="ifany") -->
+<!-- #  -->
+<!-- #  -->
+<!-- # ##OpiSt -->
+<!-- # Worse_SevMod_SSI_OpiSt <- cohortF_Drugs[cohortF_Drugs[, .I[AssistScore_OpiSt == max(AssistScore_OpiSt)], by=StudyId]$V1] -->
+<!-- # #Alternative: group %>% group_by(Subject) %>% top_n(1, pt) -->
+<!-- # length(unique(Worse_SevMod_SSI_OpiSt$StudyId)) -->
+<!-- # ##Each patient has its own "worse scroe for each drug" -->
+<!-- # #Selecting just the "earlier visit" for demographic data -->
+<!-- # Worse_SevMod_SSI_OpiSt <- Worse_SevMod_SSI_OpiSt[Worse_SevMod_SSI_OpiSt[, .I[Visit_SurveyDRUGS_Order == min(Visit_SurveyDRUGS_Order)], by=StudyId]$V1] -->
+<!-- #  -->
+<!-- #  -->
+<!-- # Worse_SevMod_SSI_OpiSt$OpiSt_Severe <- ifelse(Worse_SevMod_SSI_OpiSt$AssistScore_OpiSt >= 4, 1, 0) -->
+<!-- # table(Worse_SevMod_SSI_OpiSt$OpiSt_Severe, useNA="ifany") -->
+<!-- #  -->
+
+<!-- ``` -->
+
+
+<!-- #Create a df with id AND the columns depicting the Outcome variable (binary) for each drug with the cohort_Drugs -->
+<!-- ```{r} -->
+
+<!-- ``` -->
+
+<!-- ## Createing a variable depicting which instrument was used (ASSIST WHO or ASSIST ModiF) -->
+<!-- ###"To code for each instrument, you need to pull the variable names that correspond to the right questions from the master list (and of course make sure those are the same variable names in your dataset) and add them up for each drug." -->
+<!-- ```{r} -->
+<!-- # Instrument <- c( 'Assist2019','Assist2019', 'AssistModiF') -->
+<!-- # Assist2019 <- c('Mari2', 'Coca2', 'Coca3', 'Coca4','Coca5', 'Coca6','Coca7', 'PxStim2', 'Inh2','Sed2','Hal2','Her2','Narc2','Meth2', 'Fen2') -->
+<!-- #  -->
+<!-- #  -->
+<!-- # MARI_Severe, -->
+<!-- #                                  COCA_Severe, -->
+<!-- #                                  PxStim_Severe, -->
+<!-- #                                     AMPH_Severe, -->
+<!-- #                                     INH_Severe, -->
+<!-- #                                     SED_Severe, -->
+<!-- #                                  HAL_Severe, -->
+<!-- #                                  OpiPx_Severe, -->
+<!-- #                                  OpiSt_Severe, -->
+<!-- #                                  HER_Severe, -->
+<!-- #                                  NARC_Severe, -->
+<!-- #                                  METH_Severe, -->
+<!-- #                                  FEN_Severe -->
+<!-- #  -->
+<!-- # mark <- c(2, 3, 5, 2, 5, 8, 17, 3, 5, 5) -->
+<!-- # group <- data.frame(roll = no, sub = subject, -->
+<!-- #                     marks = mark ) -->
+<!-- #  -->
+<!-- # group -->
+<!-- ``` -->
+
+
+<!-- # Labesl for variables -->
+<!-- ```{r} -->
+<!-- library(Hmisc) -->
+
+<!-- var.labels = c(age="Age in Years", sex="Sex of the participant") -->
+
+<!-- label(data) = as.list(var.labels[match(names(data), names(var.labels))]) -->
+
+<!-- label(data) -->
+<!--                      age                      sex -->
+<!--           "Age in Years" "Sex of the participant" -->
+<!-- ``` -->
+
+
