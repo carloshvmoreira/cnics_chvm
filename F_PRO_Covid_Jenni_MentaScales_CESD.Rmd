@@ -3,34 +3,18 @@ title: "F_PRO_Covid_Jenni_MentaScales_CESD"
 output: html_document
 date: "2023-02-08"
 ---
-```{r}
-#install.packages(gitcreds)
-#edit_git_conhello <- a
-#create_github_token()
-#gitcreds::gitcreds_set()
-lkf <- function(d,p) names(d)[grep(p,names(d))]
 
-``` 
+#Input: 
+E_PRO:
+--> save(cohortF_Drugs, SSI_SevMod_Base, file = "~/Library/CloudStorage/Box-Box/UCSF_86/Jain_1986/Output_data/cohortF_Drugs_Drugs_SevMod.RData")
 
-```{r}
-
-```
-
----
-title: "F_PRO_Covid_Jenni_MentaScales"
-author: "Carlos Moreira"
-date: "For version control --> *The date and time are* *`r Sys.time()`*"
-output: html_document
----
-
-
-## General Anxiety Disorder-7 Scale 
+MENTAL HEALTH SCALES
+##Purpose:
+--> General Anxiety Disorder-7 Scale 
 Minimal Anxiety (score of 0-4)
 Mild Anxiety (score of 5-9)
 Moderate Anxiety (score of 10-14)
 Severe Anxiety (score >15)
-
-
 
 ## CES-D
 *c/o >=16
@@ -39,10 +23,8 @@ https://www.apa.org/pi/about/publications/caregivers/practice-settings/assessmen
 *>= 33
 https://www.ptsd.va.gov/professional/assessment/adult-sr/ptsd-checklist.asp
 
+#Output: 
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
 
 
 ```{r  global_options, echo=F}
@@ -125,11 +107,6 @@ AlphaColumns <- function(x) {
 lkf <- function(d,p) names(d)[grep(p,names(d))]
 ```
 
-#Loding data
-```{r Loading data}
-
-load("~/Library/CloudStorage/Box-Box/UCSF_86/Jain_1986/Output_data/cohortF_Drugs_Drugs_SevMod.RData")
-```
 
 ```{r LoadingMental dataset}
 PRO_PHQ_DepressionAnxiety <- read.csv("~/Library/CloudStorage/Box-Box/1986 Study/CNICS189_Sept2022/PRO_PHQ_DepressionAnxiety.csv", stringsAsFactors=TRUE)
@@ -164,10 +141,47 @@ range(PRO_PHQ_DepressionAnxiety$Visit_SurveyOrder)
 summary(PRO_PHQ_DepressionAnxiety)
 ```
 
+```{r}
+
+names(PRO_PHQ_DepressionAnxiety)
+```
+
+```{r CESD}
+# Mental Health 
+# Center for Epidemiologic Studies on Depression (CESD)
+# Mean Depression Score (SD)
+# Symptoms consistent with clinical depression (CESD Score ≥16) (yes/no)
+
+
+```
 
 
 
+```{r}
+#install.packages(gitcreds)
+#edit_git_conhello <- a
+#create_github_token()
+#gitcreds::gitcreds_set()
+lkf <- function(d,p) names(d)[grep(p,names(d))]
 
+``` 
+
+```{r}
+
+```
+
+##
+##
+##
+##
+
+
+#######MERGING
+#Loding data
+```{r Loading data E_PRO script --> SSIScore / Severity}
+
+load("~/Library/CloudStorage/Box-Box/UCSF_86/Jain_1986/Output_data/cohortF_Drugs_Drugs_SevMod.RData")
+```
 
 
 ```{r Editing Tables, echo=F, include=F}
