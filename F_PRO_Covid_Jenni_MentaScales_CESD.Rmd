@@ -141,9 +141,9 @@ range(PRO_PHQ_DepressionAnxiety$Visit_SurveyOrder)
 summary(PRO_PHQ_DepressionAnxiety)
 ```
 
-```{r}
-
-names(PRO_PHQ_DepressionAnxiety)
+```{r Selecting variables of interest}
+PHQ9 <- PRO_PHQ_DepressionAnxiety %>% 
+  select(-c(date))
 ```
 
 ```{r CESD}
@@ -155,35 +155,163 @@ names(PRO_PHQ_DepressionAnxiety)
 
 ```
 
+```{r PHQ-9 pg16}
+PHQ9 <- as.data.frame(PHQ9)
 
+#Qx225 Little interst or pleasure in doing things
+tabyl(PHQ9, dep1)
+PHQ9 <- PHQ9 %>% mutate(Qx1_PHQ = dplyr::case_when(
+   dep1 == "not at all" ~ 1,
+   dep1 == "several days" ~ 2 ,
+   dep1 ==  "more than half of days" ~ 3,
+   dep1 == "nearly every day" ~ 4)
+   )
 
-```{r}
-#install.packages(gitcreds)
-#edit_git_conhello <- a
-#create_github_token()
-#gitcreds::gitcreds_set()
-lkf <- function(d,p) names(d)[grep(p,names(d))]
+#Qx226 Felling down, depressed, hopeless
+tabyl(PHQ9, dep2)
+PHQ9 <- PHQ9 %>% mutate(Qx2_PHQ = dplyr::case_when(
+   dep2 == "not at all" ~ 1,
+   dep2 == "several days" ~ 2 ,
+   dep2 ==  "more than half of days" ~ 3,
+   dep2 == "nearly every day" ~ 4)
+   )
 
-``` 
+#Qx227 Sleeping
+tabyl(PHQ9, dep3)
+PHQ9 <- PHQ9 %>% mutate(Qx3_PHQ = dplyr::case_when(
+   dep3 == "not at all" ~ 1,
+   dep3 == "several days" ~ 2 ,
+   dep3 ==  "more than half of days" ~ 3,
+   dep3 == "nearly every day" ~ 4)
+   )
 
-```{r}
+#Qx228 Tired or little energy
+tabyl(PHQ9, dep4)
+PHQ9 <- PHQ9 %>% mutate(Qx4_PHQ = dplyr::case_when(
+   dep4 == "not at all" ~ 1,
+   dep4 == "several days" ~ 2 ,
+   dep4 ==  "more than half of days" ~ 3,
+   dep4 == "nearly every day" ~ 4)
+   )
+
+#Qx229 Appetite
+tabyl(PHQ9, dep5)
+PHQ9 <- PHQ9 %>% mutate(Qx5_PHQ = dplyr::case_when(
+   dep5 == "not at all" ~ 1,
+   dep5 == "several days" ~ 2 ,
+   dep5 ==  "more than half of days" ~ 3,
+   dep5 == "nearly every day" ~ 4)
+   )
+
+#Qx230 Bad about yourself
+tabyl(PHQ9, dep6)
+PHQ9 <- PHQ9 %>% mutate(Qx6_PHQ = dplyr::case_when(
+   dep6 == "not at all" ~ 1,
+   dep6 == "several days" ~ 2 ,
+   dep6 ==  "more than half of days" ~ 3,
+   dep6 == "nearly every day" ~ 4)
+   )
+
+#Qx231 Concentrating
+tabyl(PHQ9, dep7)
+PHQ9 <- PHQ9 %>% mutate(Qx7_PHQ = dplyr::case_when(
+   dep7 == "not at all" ~ 1,
+   dep7 == "several days" ~ 2 ,
+   dep7 ==  "more than half of days" ~ 3,
+   dep7 == "nearly every day" ~ 4)
+   )
+
+#Qx232 Moving or Restless
+tabyl(PHQ9, dep8)
+PHQ9 <- PHQ9 %>% mutate(Qx8_PHQ = dplyr::case_when(
+   dep8 == "not at all" ~ 1,
+   dep8 == "several days" ~ 2 ,
+   dep8 ==  "more than half of days" ~ 3,
+   dep8 == "nearly every day" ~ 4)
+   )
+
+#Qx233 Better dead
+tabyl(PHQ9, dep9)
+PHQ9 <- PHQ9 %>% mutate(Qx9_PHQ = dplyr::case_when(
+   dep9 == "not at all" ~ 1,
+   dep9 == "several days" ~ 2 ,
+   dep9 ==  "more than half of days" ~ 3,
+   dep9 == "nearly every day" ~ 4)
+   )
+```
+
+```{r Summing up the Scores for PHQ-9}
+PHQ9 <- PHQ9 %>% rowwise %>%
+  mutate(PHQ9_Score = sum(c(Qx1_PHQ,
+                                 Qx2_PHQ,
+                                 Qx3_PHQ,
+                                    Qx4_PHQ,
+                                    Qx5_PHQ,
+                                    Qx6_PHQ,
+                                 Qx7_PHQ,
+                                 Qx8_PHQ,
+                                 Qx9_PHQ), na.rm=T)
+                               )
+
+var_label(PHQ9) <- 
+        list(PHQ9_Score = "PHQ9 Score"
+         )
+
+range(PHQ9$PHQ9_Score, na.rm=T)
 
 ```
 
-##
-##
-##
-##
+```{r ScoreClassification}
+#Total scores of 5, 10, 15, and 20 represent cutpoints for mild, moderate, moderately severe and severe depression, respectively.
+PHQ9 <- as.data.frame(PHQ9)
+
+tabyl(PHQ9, PHQ9_Score)
+
+PHQ9 <- PHQ9 %>% mutate(DepSeverity = dplyr::case_when(
+      PHQ9_Score >=0 & PHQ9_Score <=4 ~ "None-minimal",
+      PHQ9_Score >= 5 & PHQ9_Score <= 9 ~ "Mild",
+      PHQ9_Score >=10  & PHQ9_Score <= 14 ~ "Moderate",
+      PHQ9_Score >= 15 & PHQ9_Score <=19  ~ "Moderately Severe",
+      PHQ9_Score >=20 & PHQ9_Score <=27 ~ "Severe"),
+
+    # Convert to factor
+    DepSeverity = factor( DepSeverity,
+      level = c("None-minimal", "Mild","Moderate","Moderately Severe","Severe")
+    )
+  )
+
+var_label(PHQ9) <- 
+        list(DepSeverity = "Depression Severity"
+         )
+
+tabyl(PHQ9, DepSeverity)
+
+```
+```{r Subset ONLY the 1st Visit}
+PHQ9_Baseline <- subset(PHQ9, Visit_SurveyOrder == 1)
+
+PHQ_preMerge <- PHQ9_Baseline %>% select(StudyId, Site, PHQ9_Score, DepSeverity, Visit_SurveyOrder)
+```
 
 
-#######MERGING
-#Loding data
-```{r Loading data E_PRO script --> SSIScore / Severity}
-
+```{r Loading Drugs' dataset E_PRO script --> SSIScore / Severity to merge with PHQ9}
 load("~/Library/CloudStorage/Box-Box/UCSF_86/Jain_1986/Output_data/cohortF_Drugs_Drugs_SevMod.RData")
+
+```
+
+```{r Cleaning Enviroment}
+rm(list= ls()[!(ls() %in% c('PHQ_preMerge', 'lkf', 'AlphaColumns', 'SSI_SevMod_Base'))])
 ```
 
 
+```{r Merging to fill the table}
+SSI_SevMod_Base$Visit_SurveyOrder <- SSI_SevMod_Base$Visit_SurveyDRUGS_Order
+
+Drugs_Depression <- inner_join(SSI_SevMod_Base,PHQ_preMerge, by=c("StudyId", "Site", "Visit_SurveyOrder"))
+
+```
+
+#TABLE
 ```{r Editing Tables, echo=F, include=F}
 reset_gtsummary_theme()
 theme_gtsummary_journal(journal = "lancet")
@@ -194,7 +322,7 @@ theme_gtsummary_compact()
 ```
 
 ```{r Baseline Risk, echo=F, include=T}
-TabMari <- SSI_SevMod_Base %>%
+TabMari <- Drugs_Depression %>%
  select( c("StudyId", "Site", "Age", "Race", "BirthSex", "AnySevMod", "AnySevere","ast_1508_od", "ast_pot2_Bn", "ast_coc2_Bn",
   "ast_pst2_Bn",              "ast_meth2_Bn",             "ast_inh2_Bn",             "ast_sed2_Bn",            
   "ast_hal2_Bn",              "ast_opi2_Bn",              "ast_opip2_Bn",             "ast_her2_Bn",            
@@ -202,9 +330,8 @@ TabMari <- SSI_SevMod_Base %>%
 "AssistRiskScore_INH", "AssistRiskScore_METH",   "AssistRiskScore_NARC",   "AssistRiskScore_OpiPx",  "AssistRiskScore_OpiSt", 
  "AssistRiskScore_SED", "AssistRiskScore_FEN","AssistScore_COCA",       "AssistScore_FEN",        "AssistScore_HAL",       
  "AssistScore_HER",        "AssistScore_INH",        "AssistScore_METH",       "AssistScore_NARC",       "AssistScore_OpiPx",     
- "AssistScore_OpiSt",      "AssistScore_POT",        "AssistScore_PxSTIM",     "AssistScore_SED" ,"PolyTwo_Bn","PolyThree_Bn"  )
+ "AssistScore_OpiSt",      "AssistScore_POT",        "AssistScore_PxSTIM",     "AssistScore_SED" ,"PolyTwo_Bn","PolyThree_Bn", "PHQ9_Score", "DepSeverity"  )
  )
-names(SSI_SevMod_Base)
  TabSevMod <- TabMari %>%
   tbl_summary(by=AnySevMod, missing="no",
               
@@ -215,7 +342,7 @@ names(SSI_SevMod_Base)
               
               
               ) %>%
-             add_p(pvalue_fun = ~style_pvalue(.x, digits = 2),simulate.p.value=TRUE ) %>%
+             add_p(pvalue_fun = ~style_pvalue(.x, digits = 2)) %>%
   add_overall() %>%
   add_n() %>% 
   # remove studyId row
@@ -230,11 +357,11 @@ names(SSI_SevMod_Base)
   modify_caption("**Table X  Characteristics of a Cohort of People Living with HIV Enrolled in the CFAR Network of Integrated Clinical Systems (CNICS) between 2018 and 2022 (N=XXXX)	by SSI score (Severe) for ANY respective substance at Baseline Visit**") %>%
   bold_labels() %>% 
 gtsummary::as_gt() %>%             # convert to gt table
-gt::tab_source_note(gt::md("*Jennis's study / CNICS 06feb2023*")) 
+gt::tab_source_note(gt::md("*Jennis's study / CNICS 09feb2023*")) 
 
  
   TabSevMod %>% gt::gtsave(             # save table as image
-    filename = "~/Library/CloudStorage/Box-Box/UCSF_86/LocalRepo/cnics_chvm/FiguresBox/SevereMod_SSI.html", inline_css = TRUE)
+    filename = "~/Library/CloudStorage/Box-Box/UCSF_86/LocalRepo/cnics_chvm/FiguresBox/SevereMod_SSI_Depression.html", inline_css = TRUE)
 
 TabSevMod
 
